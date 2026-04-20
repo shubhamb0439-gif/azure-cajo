@@ -86,17 +86,6 @@ export default function SalesOverview() {
 
   useEffect(() => {
     loadData();
-
-    const subscription = supabase
-      .channel('crm_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, loadData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'prospects' }, loadData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, loadData)
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   const loadData = async () => {
@@ -156,8 +145,7 @@ export default function SalesOverview() {
       if (targetStatus === 'qualified') {
         await convertLeadToProspect(lead, user.id);
       } else {
-        await supabase
-
+        await api.leads.update(draggedItem.id, { lead_status: targetStatus });
       }
     } else if (draggedItem.type === 'prospect') {
       const prospect = prospects.find(p => p.id === draggedItem.id);
@@ -166,8 +154,7 @@ export default function SalesOverview() {
       if (targetStatus === 'won') {
         await convertProspectToCustomer(prospect, user.id);
       } else {
-        await supabase
-
+        await api.prospects.update(draggedItem.id, { prospect_status: targetStatus });
       }
     }
 
@@ -176,16 +163,36 @@ export default function SalesOverview() {
   };
 
   const convertLeadToProspect = async (lead: Lead, userId: string) => {
-    // TODO: migrate this supabase call to api
-
+    const { data: newProspect, error: insertError } = await api.prospects.create({
+      prospect_name: lead.lead_name,
+      prospect_email: lead.lead_email,
+      prospect_phone: lead.lead_phone,
+      prospect_company: lead.lead_company,
+      prospect_position: lead.lead_position,
+      prospect_status: 'qualified',
+      prospect_source: lead.lead_source,
+      prospect_value: lead.lead_value,
+      prospect_notes: lead.lead_notes,
+      assigned_to: lead.assigned_to,
+    });
     if (!insertError && newProspect) {
       await api.leads.delete(lead.id);
     }
   };
 
   const convertProspectToCustomer = async (prospect: Prospect, userId: string) => {
-    // TODO: migrate this supabase call to api
-
+    const { data: newCustomer, error: insertError } = await api.customers.create({
+      customer_name: prospect.prospect_name,
+      customer_email: prospect.prospect_email,
+      customer_phone: prospect.prospect_phone,
+      customer_company: prospect.prospect_company,
+      customer_position: prospect.prospect_position,
+      customer_status: 'active',
+      customer_source: prospect.prospect_source,
+      customer_value: prospect.prospect_value,
+      customer_notes: prospect.prospect_notes,
+      assigned_to: prospect.assigned_to,
+    });
     if (!insertError && newCustomer) {
       await api.prospects.delete(prospect.id);
     }

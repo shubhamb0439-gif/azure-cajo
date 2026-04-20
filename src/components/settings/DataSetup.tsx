@@ -42,27 +42,12 @@ export default function DataSetup() {
 
   useEffect(() => {
     loadExchangeRates();
-
-    // Set up realtime subscription for exchange rates
-    const channel = supabase
-      .channel('exchange-rates-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'foreign_exchange_rates' },
-        () => {
-          loadExchangeRates();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      channel.unsubscribe();
-    };
+    // Realtime subscriptions not available via Azure API; data refreshes on user interaction
   }, []);
 
   const loadValues = async () => {
     setLoading(true);
-    const { data } = await api.dropdowns.getValues('').eq('drop_type', selectedType).order('drop_value');
+    const { data } = await api.dropdowns.getValues(selectedType);
     if (data) setValues(data);
     setLoading(false);
   };
@@ -102,7 +87,7 @@ export default function DataSetup() {
         enabled: userProfile?.enabled
       });
 
-      // TODO: migrate this supabase call to api
+      const { data, error } = await api.exchangeRates.update('EUR', rate);
 
       console.log('Update result - data:', data, 'error:', error);
 
@@ -112,7 +97,7 @@ export default function DataSetup() {
         return;
       }
 
-      if (!data || data.length === 0) {
+      if (!data) {
         console.error('No data returned from update');
         const debugInfo = `
 User Info:
@@ -148,7 +133,7 @@ Check that you have write access (user_rights = 'read_write' or role = 'admin') 
     e.preventDefault();
     if (!newValue.trim()) return;
 
-    await api.dropdown_values.create({
+    await api.dropdowns.addValue({
       drop_type: selectedType,
       drop_value: newValue.trim(),
       created_by: userProfile?.id,
@@ -162,7 +147,7 @@ Check that you have write access (user_rights = 'read_write' or role = 'admin') 
 
   const handleDelete = async (id: string, value: string) => {
     if (!confirm(`Delete "${value}"?`)) return;
-    await api.dropdown_values.delete(id);
+    await api.dropdowns.deleteValue(id);
     loadValues();
   };
 

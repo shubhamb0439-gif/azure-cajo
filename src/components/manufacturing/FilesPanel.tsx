@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { X, Upload, Download, Trash2, File, FileText, Image, FileArchive } from 'lucide-react';
 import { formatDate } from '../../lib/dateUtils';
+import { api } from '../../lib/api';
 
 interface FilesPanelProps {
   isOpen: boolean;
@@ -38,14 +39,14 @@ export default function FilesPanel({ isOpen, onClose, unitId, unitNumber, assemb
   const loadFiles = async () => {
     setLoading(true);
     try {
-      // TODO: migrate this supabase call to api
+      const { data, error } = await api.assemblies.getFiles(unitId);
 
       if (error) throw error;
 
       // Fetch user emails for each file
       const filesWithEmails = await Promise.all(
-        (data || []).map(async (file) => {
-          // TODO: migrate this supabase call to api
+        (data || []).map(async (file: any) => {
+          const { data: userData } = await api.users.getById(file.uploaded_by);
 
           return {
             ...file,
@@ -76,7 +77,14 @@ export default function FilesPanel({ isOpen, onClose, unitId, unitNumber, assemb
       // File upload - configure azureStorage when blob storage is ready
       // if (uploadError) throw uploadError;
 
-        // TODO: migrate this supabase call to api
+        const { error: dbError } = await api.assemblies.addFile({
+          assembly_unit_id: unitId,
+          file_name: fileName,
+          file_path: filePath,
+          file_size: file.size,
+          file_type: file.type || null,
+          uploaded_by: user.id,
+        });
 
         if (dbError) throw dbError;
 
@@ -100,18 +108,13 @@ export default function FilesPanel({ isOpen, onClose, unitId, unitNumber, assemb
 
   const handleDownload = async (file: AssemblyFile) => {
     try {
-      const { data } = await azureStorage.list(container, prefix);
-
-      if (error) throw error;
-
-      const url = URL.createObjectURL(data);
+      // File download - storage integration pending; open file path directly for now
       const link = document.createElement('a');
-      link.href = url;
+      link.href = file.file_path;
       link.download = file.file_name;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(url);
 
       await api.activityLogs.create('ACTION', {});
     } catch (error) {
@@ -124,10 +127,10 @@ export default function FilesPanel({ isOpen, onClose, unitId, unitNumber, assemb
     if (!confirm(`Are you sure you want to delete "${file.file_name}"?`)) return;
 
     try {
-      // File upload - configure azureStorage when blob storage is ready
-      if (storageError) throw storageError;
+      // File storage deletion - configure azureStorage when blob storage is ready
 
-      // TODO: migrate this supabase call to api
+      const { error: deleteError } = await api.assemblies.deleteFile(file.id);
+      if (deleteError) throw deleteError;
 
       await api.activityLogs.create('ACTION', {});
 

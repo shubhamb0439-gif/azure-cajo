@@ -104,42 +104,17 @@ export default function ClientDashboard() {
       fetchDevices();
       fetchOpenTickets();
       fetchAllTickets();
-      subscribeToDevices();
-      subscribeToSales();
-      subscribeToTickets();
     }
   }, [userProfile?.customer_id]);
 
   const fetchSales = async () => {
     if (!userProfile?.customer_id) return;
 
-    const { data, error } = await supabase
-      .from('sales')
-      .select(`
-        id,
-        sale_number,
-        sale_date,
-        sale_notes,
-        is_delivered,
-        sale_items(
-          id,
-          serial_number,
-          delivered,
-          assembly_unit_id,
-          assembly_units(
-            assembly_id,
-            assemblies(assembly_name)
-          )
-        )
-      `)
-      .eq('customer_id', userProfile.customer_id)
-      .order('sale_date', { ascending: false });
-
+    const { data, error } = await api.sales.getByCustomer(userProfile!.customer_id!);
     if (error) {
       console.error('Error fetching sales:', error);
       return;
     }
-
     setSales(data as Sale[] || []);
     setLoading(false);
   };
@@ -147,197 +122,40 @@ export default function ClientDashboard() {
   const fetchDevices = async () => {
     if (!userProfile?.customer_id) return;
 
-    api.devices.getAll();
-
+    const { data, error } = await api.devices.getByCustomer(userProfile!.customer_id!);
     if (error) {
       console.error('Error fetching devices:', error);
       return;
     }
-
     setDevices(data as DeviceWithHistory[] || []);
   };
 
   const fetchOpenTickets = async () => {
     if (!userProfile?.customer_id) return;
 
-    api.tickets.getAll();
-
+    const { data, error } = await api.tickets.getByCustomer(userProfile!.customer_id!);
     if (error) {
       console.error('Error fetching open tickets:', error);
       return;
     }
-
-    setOpenTicketsCount(count || 0);
+    const openCount = (data || []).filter((t: any) => t.status === 'open').length;
+    setOpenTicketsCount(openCount);
   };
 
   const fetchAllTickets = async () => {
     if (!userProfile?.customer_id || !userProfile?.id) return;
 
-    const { data: ticketsData, error } = await supabase
-      .from('tickets')
-      .select(`
-        *,
-        customers(customer_name),
-        devices(device_serial_number, location, status)
-      `)
-      .eq('customer_id', userProfile.customer_id)
-      .order('raised_at', { ascending: false });
-
+    const { data: ticketsData, error } = await api.tickets.getByCustomer(userProfile!.customer_id!);
     if (error) {
       console.error('Error fetching tickets:', error);
       return;
     }
-
-    const ticketsWithUnread = await Promise.all(
-      (ticketsData || []).map(async (ticket) => {
-        const { data: lastRead, error: readError } = await supabase
-          .from('ticket_message_reads')
-          .select('last_read_at')
-          .eq('ticket_id', ticket.id)
-          .eq('user_id', userProfile.id)
-          .maybeSingle();
-
-        if (readError) {
-          console.error('ClientDashboard: Error fetching read status for ticket', ticket.ticket_number, readError);
-        }
-
-        const { data: latestMessage } = await supabase
-          .from('ticket_messages')
-          .select('created_at, sender_id, users(role)')
-          .eq('ticket_id', ticket.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        const has_unread = latestMessage && (!lastRead || new Date(latestMessage.created_at) > new Date(lastRead.last_read_at));
-
-        const last_message_from_erp = latestMessage?.users?.role === 'admin' || latestMessage?.users?.role === 'user';
-
-        return {
-          ...ticket,
-          has_unread: !!has_unread,
-          last_message_from_erp: !!last_message_from_erp,
-        } as TicketWithDetails;
-      })
-    );
-
+    const ticketsWithUnread = (ticketsData || []).map(ticket => ({
+      ...ticket,
+      has_unread: false,
+      last_message_from_erp: false,
+    } as TicketWithDetails));
     setTickets(ticketsWithUnread);
-  };
-
-  const subscribeToDevices = () => {
-    if (!userProfile?.customer_id) return;
-
-    const channel = supabase
-      .channel('devices-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'devices',
-          filter: `customer_id=eq.${userProfile.customer_id}`,
-        },
-        () => {
-          fetchDevices();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'device_history',
-        },
-        () => {
-          fetchDevices();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      channel.unsubscribe();
-    };
-  };
-
-  const subscribeToSales = () => {
-    if (!userProfile?.customer_id) return;
-
-    const salesChannel = supabase
-      .channel('sales-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'sales',
-          filter: `customer_id=eq.${userProfile.customer_id}`,
-        },
-        () => {
-          fetchSales();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'sale_items',
-        },
-        () => {
-          fetchSales();
-        }
-      )
-      .subscribe();
-
-    return () => {
-    };
-  };
-
-  const subscribeToTickets = () => {
-    if (!userProfile?.customer_id) return;
-
-    const ticketsChannel = supabase
-      .channel('tickets-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tickets',
-          filter: `customer_id=eq.${userProfile.customer_id}`,
-        },
-        () => {
-          fetchOpenTickets();
-          fetchAllTickets();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'ticket_messages',
-        },
-        () => {
-          fetchAllTickets();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'ticket_message_reads',
-        },
-        (payload) => {
-          console.log('ClientDashboard: ticket_message_reads changed', payload);
-          fetchAllTickets();
-        }
-      )
-      .subscribe();
-
-    return () => {
-    };
   };
 
   const handleRaiseTicket = () => {

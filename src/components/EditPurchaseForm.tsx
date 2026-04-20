@@ -162,105 +162,32 @@ export default function EditPurchaseForm({ purchase, onClose, onSuccess }: Props
     setLoading(true);
 
     try {
-      await supabase
+      // Build the items array for the API update call
+      const updatedItems = items.map(item => ({
+        id: item.id,
+        item_id: item.item_id,
+        vendor_item_code: item.vendor_item_code || null,
+        quantity: item.quantity,
+        quantity_received: item.quantity_received,
+        unit_cost: item.unit_cost,
+        lead_time: item.lead_time,
+        toDelete: item.toDelete,
+      }));
 
-      for (const item of items) {
-        if (item.toDelete && item.id) {
-          if ((item.originalQuantityReceived || 0) > 0) {
-            const inventoryItem = inventoryItems.find(inv => inv.id === item.item_id);
-            if (inventoryItem) {
-              const newStock = inventoryItem.item_stock_current - (item.originalQuantityReceived || 0);
+      const { error: updateError } = await api.purchases.update(purchase.id, {
+        purchase_date: purchaseDate,
+        purchase_po_number: poNumber || null,
+        purchase_vendor_id: vendorId || null,
+        items: updatedItems,
+      });
 
-              // TODO: migrate this supabase call to api
+      if (updateError) throw updateError;
 
-              let totalCost = 0;
-              let totalLeadTimeWeighted = 0;
-              let totalQty = 0;
-
-              if (allReceivedItems) {
-                allReceivedItems.forEach((receivedItem) => {
-                  totalCost += receivedItem.quantity_received * receivedItem.unit_cost;
-                  totalLeadTimeWeighted += receivedItem.quantity_received * receivedItem.lead_time;
-                  totalQty += receivedItem.quantity_received;
-                });
-              }
-
-              const newAvgCost = totalQty > 0 ? totalCost / totalQty : 0;
-              const newAvgLeadTime = totalQty > 0 ? totalLeadTimeWeighted / totalQty : 0;
-
-              await supabase
-
-            }
-          }
-
-          await api.purchase_items.delete(item.id);
-          continue;
-        }
-
-        if (item.id) {
-          const stockDiff = item.quantity_received - (item.originalQuantityReceived || 0);
-
-          await supabase
-
-          if (stockDiff !== 0) {
-            const inventoryItem = inventoryItems.find(inv => inv.id === item.item_id);
-            if (inventoryItem) {
-              const newStock = inventoryItem.item_stock_current + stockDiff;
-
-              // TODO: migrate this supabase call to api
-
-              let totalCost = 0;
-              let totalLeadTimeWeighted = 0;
-              let totalQty = 0;
-
-              if (allReceivedItems) {
-                allReceivedItems.forEach((receivedItem) => {
-                  totalCost += receivedItem.quantity_received * receivedItem.unit_cost;
-                  totalLeadTimeWeighted += receivedItem.quantity_received * receivedItem.lead_time;
-                  totalQty += receivedItem.quantity_received;
-                });
-              }
-
-              const newAvgCost = totalQty > 0 ? totalCost / totalQty : 0;
-              const newAvgLeadTime = totalQty > 0 ? totalLeadTimeWeighted / totalQty : 0;
-
-              await supabase
-
-            }
-          }
-        } else {
-          // TODO: migrate this supabase call to api
-
-          if (item.quantity_received > 0 && newItem) {
-            const inventoryItem = inventoryItems.find(inv => inv.id === item.item_id);
-            if (inventoryItem) {
-              const newStock = inventoryItem.item_stock_current + item.quantity_received;
-
-              // TODO: migrate this supabase call to api
-
-              let totalCost = 0;
-              let totalLeadTimeWeighted = 0;
-              let totalQty = 0;
-
-              if (allReceivedItems) {
-                allReceivedItems.forEach((receivedItem) => {
-                  totalCost += receivedItem.quantity_received * receivedItem.unit_cost;
-                  totalLeadTimeWeighted += receivedItem.quantity_received * receivedItem.lead_time;
-                  totalQty += receivedItem.quantity_received;
-                });
-              }
-
-              const newAvgCost = totalQty > 0 ? totalCost / totalQty : 0;
-              const newAvgLeadTime = totalQty > 0 ? totalLeadTimeWeighted / totalQty : 0;
-
-              await supabase
-
-            }
-          }
-        }
-      }
-
-      await api.activityLogs.create('ACTION', {});
+      await api.activityLogs.create('UPDATE_PURCHASE', {
+        purchaseId: purchase.id,
+        poNumber: poNumber,
+        itemCount: activeItems.length,
+      });
 
       onSuccess();
     } catch (error: any) {

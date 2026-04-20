@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Send, Bug, Sparkles, AlertCircle, CheckCircle, Clock, XCircle, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { api } from '../lib/api';
 
 interface ReportsPanelProps {
   isOpen: boolean;
@@ -85,7 +86,7 @@ export default function ReportsPanel({ isOpen, onClose }: ReportsPanelProps) {
 
   const fetchRequests = async () => {
     try {
-      // TODO: migrate this supabase call to api
+      const { data, error } = await api.systemRequests.getAll();
 
       if (error) throw error;
       setRequests(data || []);
@@ -100,7 +101,13 @@ export default function ReportsPanel({ isOpen, onClose }: ReportsPanelProps) {
 
     setLoading(true);
     try {
-      // TODO: migrate this supabase call to api
+      const { error } = await api.systemRequests.create({
+        type: formData.type,
+        location: formData.location,
+        description: formData.description,
+        created_by: userProfile.id,
+        status: 'New',
+      });
 
       if (error) throw error;
 
@@ -119,7 +126,7 @@ export default function ReportsPanel({ isOpen, onClose }: ReportsPanelProps) {
     if (!confirm('Are you sure you want to cancel this request?')) return;
 
     try {
-      // TODO: migrate this supabase call to api
+      await api.systemRequests.delete(requestId);
 
       fetchRequests();
     } catch (error) {

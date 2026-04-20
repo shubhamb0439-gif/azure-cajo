@@ -85,18 +85,8 @@ export default function Purchases() {
   const loadData = async () => {
     setLoading(true);
     const [purchasesRes, vendorsRes] = await Promise.all([
-      supabase
-        .from('purchases')
-        .select(`
-          *,
-          vendors(vendor_name),
-          purchase_items(
-            *,
-            inventory_items(id, item_id, item_name, item_stock_current)
-          )
-        `)
-        .order('purchase_date', { ascending: false }),
-      api.vendors.getAll())
+      api.purchases.getAll(),
+      api.vendors.getAll(),
     ]);
     if (purchasesRes.data) setPurchases(purchasesRes.data as unknown as Purchase[]);
     if (vendorsRes.data) setVendors(vendorsRes.data);
@@ -134,24 +124,16 @@ export default function Purchases() {
       for (const item of receivedItems) {
         const newStock = item.inventory_items.item_stock_current - item.quantity_received;
 
-        await supabase
-          .from('inventory_items')
-          .update({
-            item_stock_current: newStock,
-            updated_by: userProfile?.id,
-          })
-          .eq('id', item.inventory_items.id);
+        await api.inventory.update(item.inventory_items.id, {
+          item_stock_current: newStock,
+        });
       }
 
       await api.purchases.delete(purchase.id);
 
-      // api call
-        user_id: userProfile?.id,
-        action: 'DELETE_PURCHASE',
-        details: {
-          poNumber: purchase.purchase_po_number,
-          itemCount: purchase.purchase_items.length,
-        },
+      await api.activityLogs.create('DELETE_PURCHASE', {
+        poNumber: purchase.purchase_po_number,
+        itemCount: purchase.purchase_items.length,
       });
 
       loadData();

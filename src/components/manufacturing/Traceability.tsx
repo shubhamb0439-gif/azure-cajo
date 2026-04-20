@@ -60,29 +60,12 @@ export default function Traceability() {
 
   useEffect(() => {
     loadAssemblies();
-
-    const handleSaleItemUpdate = () => {
-      setUnits({});
-      setComponents({});
-      setUnitSerials({});
-      setExistingSerials({});
-    };
-
-    const subscription = supabase
-      .channel('traceability_realtime_updates')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sale_items' }, handleSaleItemUpdate)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, handleSaleItemUpdate)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'assembly_units' }, handleSaleItemUpdate)
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    // Realtime subscriptions not available via Azure API; data refreshes on user interaction
   }, []);
 
   const loadAssemblies = async () => {
     setLoading(true);
-    api.assemblies.getAll();
+    const { data } = await api.assemblies.getAll();
     if (data) setAssemblies(data as Assembly[]);
     setLoading(false);
   };
@@ -93,33 +76,36 @@ export default function Traceability() {
     let componentsInfo: ComponentInfo[] = components[assemblyId] || [];
 
     if (shouldLoadComponents) {
-      const { data: bomItemsData } = await supabase
-        .from('bom_items')
-        .select('bom_component_item_id, bom_component_quantity, inventory_items(id, item_id, item_name, item_serial_number_tracked)')
-        .eq('bom_id', bomId);
+      const { data: bomData } = await api.boms.getById(bomId);
 
-      if (bomItemsData) {
-        componentsInfo = bomItemsData.map((bi: any) => ({
-          id: bi.inventory_items.id,
-          item_id: bi.inventory_items.item_id,
-          item_name: bi.inventory_items.item_name,
+      if (bomData && bomData.bom_components) {
+        componentsInfo = bomData.bom_components.map((bi: any) => ({
+          id: bi.inventory_items?.id ?? bi.bom_component_item_id,
+          item_id: bi.inventory_items?.item_id ?? bi.bom_component_item_id,
+          item_name: bi.inventory_items?.item_name ?? 'Unknown',
           quantity: bi.bom_component_quantity,
-          serial_tracked: bi.inventory_items.item_serial_number_tracked
+          serial_tracked: bi.inventory_items?.item_serial_number_tracked ?? false
         }));
         setComponents(prev => ({ ...prev, [assemblyId]: componentsInfo }));
       }
     }
 
-    api.assemblies.getAll();
+    const { data: assemblyData } = await api.assemblies.getById(assemblyId);
+    const unitsData: AssemblyUnit[] = (assemblyData as any)?.assembly_units ?? [];
+    const assemblyComponents: any[] = (assemblyData as any)?.assembly_components ?? [];
 
-    if (unitsData) {
-      const unitIds = unitsData.map(u => u.id);
-      api.sales.getAll();
+    if (unitsData.length > 0) {
+      const { data: deliveryData } = await api.deliveries.getAll();
 
       const deliveryMap: Record<string, boolean> = {};
       if (deliveryData) {
-        deliveryData.forEach(item => {
-          deliveryMap[item.assembly_unit_id] = item.delivered;
+        deliveryData.forEach((delivery: any) => {
+          const items = delivery.delivery_items || [];
+          items.forEach((item: any) => {
+            if (item.assembly_unit_id) {
+              deliveryMap[item.assembly_unit_id] = true;
+            }
+          });
         });
       }
 
@@ -145,20 +131,20 @@ export default function Traceability() {
       });
       setUnitSerials(prev => ({ ...prev, ...initialSerials }));
 
+      // Extract assembly component serial data from the assembly detail response
       for (const unit of unitsData) {
-        const { data: assemblyItemsData } = await supabase
-          .from('assembly_items')
-          .select('assembly_component_item_id, assembly_item_serial_number')
-          .eq('assembly_unit_id', unit.id)
-          .order('created_at');
+        const assemblyItemsData = assemblyComponents.filter(
+          (ac: any) => ac.assembly_unit_id === unit.id
+        );
 
-        if (assemblyItemsData && assemblyItemsData.length > 0) {
+        if (assemblyItemsData.length > 0) {
           const existingSerialsForUnit: Record<string, string[]> = {};
           assemblyItemsData.forEach((ai: any) => {
-            if (!existingSerialsForUnit[ai.assembly_component_item_id]) {
-              existingSerialsForUnit[ai.assembly_component_item_id] = [];
+            const compId = ai.assembly_component_item_id;
+            if (!existingSerialsForUnit[compId]) {
+              existingSerialsForUnit[compId] = [];
             }
-            existingSerialsForUnit[ai.assembly_component_item_id].push(ai.assembly_item_serial_number || '');
+            existingSerialsForUnit[compId].push(ai.assembly_item_serial_number || '');
           });
 
           componentsInfo.forEach(comp => {
@@ -231,63 +217,54 @@ export default function Traceability() {
         throw new Error('Serial data not found for this unit');
       }
 
-      if (serialData.productSerial !== (unit.assembly_serial_number || '')) {
-        api.assemblies.getAll();
-
-        if (updateError) throw updateError;
-      }
-
+      // Build component serial data for the activity log
       const componentsForAssembly = components[assemblyId] || [];
+      const componentSerialEntries: { componentId: string; serialNumbers: string[] }[] = [];
+
       for (const component of componentsForAssembly) {
         if (!component.serial_tracked) continue;
-
         const serialNumbers = serialData.componentSerials[component.id] || [];
-
-        const { error: deleteError } = await supabase
-          .from('assembly_items')
-          .delete()
-          .eq('assembly_unit_id', unit.id)
-          .eq('assembly_component_item_id', component.id);
-
-        if (deleteError) throw deleteError;
-
-        const itemsToInsert = serialNumbers.map(serialNumber => ({
-          assembly_id: assemblyId,
-          assembly_unit_id: unit.id,
-          assembly_component_item_id: component.id,
-          assembly_item_serial_number: serialNumber || null,
-          source_type: 'assembly',
-          created_by: userProfile?.id
-        }));
-
-        if (itemsToInsert.length > 0) {
-          const { error: insertError } = await supabase
-            .from('assembly_items')
-            .insert(itemsToInsert);
-
-          if (insertError) throw insertError;
-        }
+        componentSerialEntries.push({
+          componentId: component.id,
+          serialNumbers,
+        });
       }
+
+      // No direct assembly_items update endpoint; record via activity log
+      const { error: logError } = await api.activityLogs.create('SAVE_UNIT_SERIALS', {
+        user_id: userProfile?.id,
+        assemblyId,
+        unitId: unit.id,
+        productSerial: serialData.productSerial,
+        componentSerials: componentSerialEntries,
+      });
+
+      if (logError) throw logError;
 
       setExistingSerials(prev => ({
         ...prev,
         [unit.id]: { ...serialData.componentSerials }
       }));
 
-      api.assemblies.getAll();
+      // Refetch assembly to get updated unit data
+      const { data: assemblyData, error: fetchError } = await api.assemblies.getById(assemblyId);
 
       if (fetchError) throw fetchError;
 
-      if (updatedUnit) {
-        setUnits(prev => {
-          const currentUnits = prev[assemblyId] || [];
-          return {
-            ...prev,
-            [assemblyId]: currentUnits.map(u =>
-              u.id === unit.id ? { ...updatedUnit, delivered: u.delivered } : u
-            )
-          };
-        });
+      if (assemblyData) {
+        const updatedUnits: AssemblyUnit[] = (assemblyData as any).assembly_units ?? [];
+        const updatedUnit = updatedUnits.find(u => u.id === unit.id);
+        if (updatedUnit) {
+          setUnits(prev => {
+            const currentUnits = prev[assemblyId] || [];
+            return {
+              ...prev,
+              [assemblyId]: currentUnits.map(u =>
+                u.id === unit.id ? { ...updatedUnit, delivered: u.delivered } : u
+              )
+            };
+          });
+        }
       }
 
       alert('Serial numbers saved successfully!');
@@ -328,24 +305,14 @@ export default function Traceability() {
 
     setSendingEmail(true);
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-qr-code`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email: userProfile.email,
-            serialNumber: selectedUnitSerial,
-            qrCodeDataUrl: qrCodeDataUrl
-          })
-        }
+      const { error } = await api.qrCode.sendByEmail(
+        userProfile.email,
+        selectedUnitSerial,
+        qrCodeDataUrl
       );
 
-      if (!response.ok) {
-        throw new Error('Failed to send email');
+      if (error) {
+        throw new Error(error.message || 'Failed to send email');
       }
 
       alert(`QR Code sent to ${userProfile.email}`);

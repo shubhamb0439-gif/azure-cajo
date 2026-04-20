@@ -85,9 +85,10 @@ export default function Vendors() {
     } else {
       newExpanded.add(vendorId);
       if (!vendorPurchases[vendorId]) {
-        // TODO: migrate this supabase call to api
-        if (data) {
-          setVendorPurchases(prev => ({ ...prev, [vendorId]: data as VendorPurchase[] }));
+        const res = await api.purchases.getAll();
+        if (res.data) {
+          const vendorData = res.data.filter(p => p.vendor_id === vendorId);
+          setVendorPurchases(prev => ({ ...prev, [vendorId]: vendorData as VendorPurchase[] }));
         }
       }
     }

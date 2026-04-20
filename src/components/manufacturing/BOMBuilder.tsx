@@ -32,14 +32,14 @@ export default function BOMBuilder() {
 
   const loadBOMs = async () => {
     setLoading(true);
-    // TODO: migrate this supabase call to api
+    const { data } = await api.boms.getAll();
     if (data) setBoms(data as BOM[]);
     setLoading(false);
   };
 
   const loadBOMItems = async (bomId: string) => {
-    // TODO: migrate this supabase call to api
-    if (data) setBomItems(data as BOMItem[]);
+    const { data } = await api.boms.getById(bomId);
+    if (data && data.bom_components) setBomItems(data.bom_components as BOMItem[]);
   };
 
   const handleDeleteBOM = async (id: string) => {
@@ -53,7 +53,7 @@ export default function BOMBuilder() {
   };
 
   const handleDeleteBOMItem = async (id: string) => {
-    await api.bom_items.delete(id);
+    await api.boms.removeComponent(id);
     if (selectedBOM) loadBOMItems(selectedBOM.id);
   };
 
@@ -284,7 +284,7 @@ function BOMItemForm({ bom, onSuccess, hasWriteAccess, isViewOnly }: { bom: BOM;
     e.preventDefault();
     setLoading(true);
     try {
-      await api.bom_items.create({ ...form, bom_id: bom.id, created_by: userProfile?.id });
+      await api.boms.addComponent({ ...form, bom_id: bom.id, created_by: userProfile?.id });
       setForm({ bom_component_item_id: '', bom_component_quantity: 1 });
       setSelectedItem(null);
       setSearchTerm('');

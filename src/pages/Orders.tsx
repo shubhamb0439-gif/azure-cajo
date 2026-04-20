@@ -86,22 +86,7 @@ export default function Orders() {
 
   const loadOrders = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('purchase_orders')
-      .select(`
-        *,
-        customers(customer_name, customer_email, customer_phone),
-        purchase_order_items(
-          id,
-          quantity,
-          bom_id,
-          boms(
-            bom_name,
-            inventory_items(item_name)
-          )
-        )
-      `)
-      .order('created_at', { ascending: false });
+    const { data, error } = await api.purchaseOrders.getAll();
 
     if (error) {
       console.error('Error loading orders:', error);
@@ -120,7 +105,7 @@ export default function Orders() {
     for (const order of ordersList) {
       const [assembliesRes, salesRes] = await Promise.all([
         api.assemblies.getAll(),
-        api.sales.getAll())
+        api.sales.getAll()
       ]);
 
       relations[order.id] = (assembliesRes.data && assembliesRes.data.length > 0) ||
@@ -131,7 +116,7 @@ export default function Orders() {
   };
 
   const loadCustomers = async () => {
-    api.customers.getAll();
+    const { data } = await api.customers.getAll();
 
     if (data) {
       setCustomers(data);
@@ -163,48 +148,17 @@ export default function Orders() {
     setLoadingHistory(prev => ({ ...prev, [poNumber]: true }));
 
     const [salesRes, deliveriesRes] = await Promise.all([
-      supabase
-        .from('sales')
-        .select(`
-          id,
-          sale_number,
-          sale_date,
-          sale_notes,
-          is_delivered,
-          sale_items (
-            id,
-            serial_number
-          )
-        `)
-        .eq('po_number', poNumber)
-        .order('sale_date', { ascending: false }),
-
-      supabase
-        .from('deliveries')
-        .select(`
-          id,
-          delivery_address,
-          delivery_location,
-          delivery_date,
-          delivered,
-          delivered_at,
-          sale_id,
-          delivery_items (
-            id,
-            sale_item:sale_items (
-              serial_number
-            )
-          )
-        `)
-        .order('delivery_date', { ascending: false })
+      api.sales.getAll(),
+      api.deliveries.getAll(),
     ]);
 
     if (salesRes.data) {
-      setOrderSales(prev => ({ ...prev, [poNumber]: salesRes.data as Sale[] }));
+      const poSales = (salesRes.data as any[]).filter(s => s.po_number === poNumber);
+      setOrderSales(prev => ({ ...prev, [poNumber]: poSales as Sale[] }));
 
       if (deliveriesRes.data) {
-        const saleIds = salesRes.data.map(s => s.id);
-        const orderDeliveriesData = deliveriesRes.data.filter((d: any) =>
+        const saleIds = poSales.map(s => s.id);
+        const orderDeliveriesData = (deliveriesRes.data as any[]).filter((d: any) =>
           saleIds.includes(d.sale_id)
         );
         setOrderDeliveries(prev => ({ ...prev, [poNumber]: orderDeliveriesData as Delivery[] }));
@@ -234,13 +188,9 @@ export default function Orders() {
     }
 
     try {
-      api.purchaseOrders.getAll();
+      const { error } = await api.purchaseOrders.delete(order.id);
 
-      if (itemsError) throw itemsError;
-
-      api.purchaseOrders.getAll();
-
-      if (poError) throw poError;
+      if (error) throw error;
 
       await loadOrders();
     } catch (err: any) {

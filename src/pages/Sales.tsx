@@ -47,44 +47,11 @@ export default function Sales() {
 
   useEffect(() => {
     loadSales();
-
-    const subscription = supabase
-      .channel('sales_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, loadSales)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sale_items' }, loadSales)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, loadSales)
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   const loadSales = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('sales')
-      .select(`
-        *,
-        customers(customer_name, customer_company),
-        sale_items(
-          id,
-          assembly_unit_id,
-          serial_number,
-          assembly_units(
-            assemblies(assembly_name)
-          )
-        ),
-        deliveries(
-          id,
-          delivery_address,
-          delivery_location,
-          delivery_date,
-          delivery_notes
-        )
-      `)
-      .order('created_at', { ascending: false });
-
+    const { data } = await api.sales.getAll();
     if (data) {
       setSales(data as any);
     }
@@ -92,24 +59,13 @@ export default function Sales() {
   };
 
   const handleEdit = async (sale: Sale) => {
-    const { data: saleData } = await supabase
-      .from('sales')
-      .select(`
-        *,
-        sale_items(
-          assembly_unit_id,
-          serial_number
-        )
-      `)
-      .eq('id', sale.id)
-      .single();
-
+    const { data: saleData } = await api.sales.getById(sale.id);
     if (saleData) {
       setSelectedSale({
         ...saleData,
         customer_id: sale.customer_id,
         customer_name: sale.customers.customer_name,
-        sale_items: saleData.sale_items || [],
+        sale_items: (saleData as any).sale_items || [],
       });
       setShowEditPanel(true);
     }
@@ -120,18 +76,14 @@ export default function Sales() {
       return;
     }
 
-    api.sales.getAll();
+    const { error } = await api.sales.delete(sale.id);
 
     if (error) {
       alert('Error deleting sale: ' + error.message);
     } else {
-      // api call
-        user_id: userProfile?.id,
-        action: 'DELETE_SALE',
-        details: {
-          saleNumber: sale.sale_number,
-          customerName: sale.customers.customer_name,
-        },
+      await api.activityLogs.create('DELETE_SALE', {
+        saleNumber: sale.sale_number,
+        customerName: sale.customers.customer_name,
       });
       loadSales();
     }
@@ -140,7 +92,7 @@ export default function Sales() {
   const handleDeliverToggle = async (sale: Sale) => {
     const newDeliveredState = !sale.is_delivered;
 
-    api.sales.getAll();
+    const { error: updateError } = await api.sales.update(sale.id, { is_delivered: newDeliveredState });
 
     if (updateError) {
       alert('Error updating delivery status: ' + updateError.message);
@@ -148,15 +100,11 @@ export default function Sales() {
     }
 
     if (newDeliveredState) {
-      const { data: newDelivery, error: deliveryError } = await supabase
-        .from('deliveries')
-        .insert({
-          sale_id: sale.id,
-          created_by: userProfile?.id,
-          updated_by: userProfile?.id,
-        })
-        .select()
-        .single();
+      const { data: newDelivery, error: deliveryError } = await api.deliveries.create({
+        sale_id: sale.id,
+        created_by: userProfile?.id,
+        updated_by: userProfile?.id,
+      });
 
       if (deliveryError || !newDelivery) {
         alert('Error creating delivery: ' + deliveryError?.message);
@@ -164,51 +112,25 @@ export default function Sales() {
         return;
       }
 
-      api.sales.getAll();
+      await api.activityLogs.create('CREATE_DELIVERY', {
+        saleNumber: sale.sale_number,
+        customerName: sale.customers.customer_name,
+      });
+    } else {
+      const deliveryId = sale.deliveries?.[0]?.id;
+      if (deliveryId) {
+        const { error: deleteError } = await api.deliveries.delete(deliveryId);
 
-      if (saleItems && saleItems.length > 0) {
-        const deliveryItemsToInsert = saleItems.map(item => ({
-          delivery_id: newDelivery.id,
-          sale_item_id: item.id,
-        }));
-
-        const { error: deliveryItemsError } = await supabase
-          .from('delivery_items')
-          .insert(deliveryItemsToInsert);
-
-        if (deliveryItemsError) {
-          alert('Error adding items to delivery: ' + deliveryItemsError.message);
-          await api.deliveries.delete(newDelivery.id);
-          await api.sales.update(sale.id, { is_delivered: false });
+        if (deleteError) {
+          alert('Error removing delivery: ' + deleteError.message);
+          await api.sales.update(sale.id, { is_delivered: true });
           return;
         }
       }
 
-      // api call
-        user_id: userProfile?.id,
-        action: 'CREATE_DELIVERY',
-        details: {
-          saleNumber: sale.sale_number,
-          customerName: sale.customers.customer_name,
-          itemCount: saleItems?.length || 0,
-        },
-      });
-    } else {
-      api.deliveries.getAll();
-
-      if (deleteError) {
-        alert('Error removing delivery: ' + deleteError.message);
-        await api.sales.update(sale.id, { is_delivered: true });
-        return;
-      }
-
-      // api call
-        user_id: userProfile?.id,
-        action: 'DELETE_DELIVERY',
-        details: {
-          saleNumber: sale.sale_number,
-          customerName: sale.customers.customer_name,
-        },
+      await api.activityLogs.create('DELETE_DELIVERY', {
+        saleNumber: sale.sale_number,
+        customerName: sale.customers.customer_name,
       });
     }
 

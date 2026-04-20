@@ -39,18 +39,23 @@ export default function MakePurchasePanel({ initialItemId, onClose, onSuccess }:
   useEffect(() => {
     if (initialItemId && items.length > 0) {
       (async () => {
-        const { data } = await supabase
-          .from('purchase_items')
-          .select('vendor_item_code')
-          .eq('item_id', initialItemId)
-          .not('vendor_item_code', 'is', null)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+        const { data: allPurchases } = await api.purchases.getAll();
+        let vendorItemCode = '';
+        if (allPurchases) {
+          for (const p of allPurchases) {
+            const matchingItems = (p.purchase_items || [])
+              .filter((pi: any) => pi.item_id === initialItemId && pi.vendor_item_code)
+              .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            if (matchingItems.length > 0) {
+              vendorItemCode = matchingItems[0].vendor_item_code;
+              break;
+            }
+          }
+        }
 
         setPurchaseItems([{
           item_id: initialItemId,
-          vendor_item_code: data?.vendor_item_code || '',
+          vendor_item_code: vendorItemCode,
           quantity: 1,
           unit_cost: 0,
           lead_time: 0,
@@ -62,7 +67,7 @@ export default function MakePurchasePanel({ initialItemId, onClose, onSuccess }:
   const loadData = async () => {
     const [vendorsRes, itemsRes] = await Promise.all([
       api.vendors.getAll(),
-      api.inventory.getAll())
+      api.inventory.getAll(),
     ]);
     if (vendorsRes.data) setVendors(vendorsRes.data);
     if (itemsRes.data) {
@@ -77,18 +82,22 @@ export default function MakePurchasePanel({ initialItemId, onClose, onSuccess }:
       return;
     }
 
-    const { data: vendorPurchases } = await supabase
-      .from('purchase_items')
-      .select('item_id, purchases!inner(purchase_vendor_id)')
-      .eq('purchases.purchase_vendor_id', vendorId);
+    const { data: allPurchases } = await api.purchases.getAll();
+    if (allPurchases) {
+      const vendorItemIds = new Set<string>();
+      allPurchases
+        .filter((p: any) => p.purchase_vendor_id === vendorId)
+        .forEach((p: any) => {
+          (p.purchase_items || []).forEach((pi: any) => vendorItemIds.add(pi.item_id));
+        });
 
-    if (vendorPurchases && vendorPurchases.length > 0) {
-      const vendorItemIds = new Set(vendorPurchases.map(p => p.item_id));
-
-      const vendorItems = items.filter(item => vendorItemIds.has(item.id));
-      const otherItems = items.filter(item => !vendorItemIds.has(item.id));
-
-      setSortedItems([...vendorItems, ...otherItems]);
+      if (vendorItemIds.size > 0) {
+        const vendorItems = items.filter(item => vendorItemIds.has(item.id));
+        const otherItems = items.filter(item => !vendorItemIds.has(item.id));
+        setSortedItems([...vendorItems, ...otherItems]);
+      } else {
+        setSortedItems(items);
+      }
     } else {
       setSortedItems(items);
     }
@@ -113,32 +122,25 @@ export default function MakePurchasePanel({ initialItemId, onClose, onSuccess }:
     newItems[index] = { ...newItems[index], [field]: value };
 
     if (field === 'item_id' && value) {
-      if (formData.vendor_id) {
-        const { data } = await supabase
-          .from('purchase_items')
-          .select('vendor_item_code, purchases!inner(purchase_vendor_id)')
-          .eq('item_id', value)
-          .eq('purchases.purchase_vendor_id', formData.vendor_id)
-          .not('vendor_item_code', 'is', null)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+      const { data: allPurchases } = await api.purchases.getAll();
+      if (allPurchases) {
+        let vendorItemCode = '';
+        const filteredPurchases = formData.vendor_id
+          ? allPurchases.filter((p: any) => p.purchase_vendor_id === formData.vendor_id)
+          : allPurchases;
 
-        if (data?.vendor_item_code) {
-          newItems[index].vendor_item_code = data.vendor_item_code;
+        for (const p of filteredPurchases) {
+          const matchingItems = (p.purchase_items || [])
+            .filter((pi: any) => pi.item_id === value && pi.vendor_item_code)
+            .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          if (matchingItems.length > 0) {
+            vendorItemCode = matchingItems[0].vendor_item_code;
+            break;
+          }
         }
-      } else {
-        const { data } = await supabase
-          .from('purchase_items')
-          .select('vendor_item_code')
-          .eq('item_id', value)
-          .not('vendor_item_code', 'is', null)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
 
-        if (data?.vendor_item_code) {
-          newItems[index].vendor_item_code = data.vendor_item_code;
+        if (vendorItemCode) {
+          newItems[index].vendor_item_code = vendorItemCode;
         }
       }
     }
@@ -162,44 +164,28 @@ export default function MakePurchasePanel({ initialItemId, onClose, onSuccess }:
     setLoading(true);
 
     try {
-      const { data: purchase, error: purchaseError } = await supabase
-        .from('purchases')
-        .insert({
-          purchase_vendor_id: formData.vendor_id || null,
-          purchase_po_number: formData.po_number || null,
-          purchase_date: formData.purchase_date,
+      const { data: purchase, error: purchaseError } = await api.purchases.create({
+        purchase_vendor_id: formData.vendor_id || null,
+        purchase_po_number: formData.po_number || null,
+        purchase_date: formData.purchase_date,
+        created_by: userProfile?.id,
+        items: purchaseItems.map(item => ({
+          item_id: item.item_id,
+          vendor_item_code: item.vendor_item_code || null,
+          quantity: item.quantity,
+          quantity_received: 0,
+          unit_cost: item.unit_cost,
+          lead_time: item.lead_time,
           created_by: userProfile?.id,
-        })
-        .select()
-        .single();
+        })),
+      });
 
       if (purchaseError || !purchase) throw purchaseError || new Error('Failed to create purchase');
 
-      const itemsToInsert = purchaseItems.map(item => ({
-        purchase_id: purchase.id,
-        item_id: item.item_id,
-        vendor_item_code: item.vendor_item_code || null,
-        quantity: item.quantity,
-        quantity_received: 0,
-        unit_cost: item.unit_cost,
-        lead_time: item.lead_time,
-        created_by: userProfile?.id,
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('purchase_items')
-        .insert(itemsToInsert);
-
-      if (itemsError) throw itemsError;
-
-      // api call
-        user_id: userProfile?.id,
-        action: 'CREATE_PURCHASE',
-        details: {
-          purchaseId: purchase.id,
-          poNumber: formData.po_number,
-          itemCount: purchaseItems.length,
-        },
+      await api.activityLogs.create('CREATE_PURCHASE', {
+        purchaseId: purchase.id,
+        poNumber: formData.po_number,
+        itemCount: purchaseItems.length,
       });
 
       onSuccess();
@@ -221,27 +207,30 @@ export default function MakePurchasePanel({ initialItemId, onClose, onSuccess }:
     await sortItemsByVendor(vendorId);
 
     if (vendorId && purchaseItems.length > 0) {
-      const updatedItems = await Promise.all(
-        purchaseItems.map(async (item) => {
+      const { data: allPurchases } = await api.purchases.getAll();
+      if (allPurchases) {
+        const vendorPurchases = allPurchases.filter((p: any) => p.purchase_vendor_id === vendorId);
+        const updatedItems = purchaseItems.map((item) => {
           if (!item.item_id) return item;
 
-          const { data } = await supabase
-            .from('purchase_items')
-            .select('vendor_item_code, purchases!inner(purchase_vendor_id)')
-            .eq('item_id', item.item_id)
-            .eq('purchases.purchase_vendor_id', vendorId)
-            .not('vendor_item_code', 'is', null)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+          let vendorItemCode = '';
+          for (const p of vendorPurchases) {
+            const matchingItems = (p.purchase_items || [])
+              .filter((pi: any) => pi.item_id === item.item_id && pi.vendor_item_code)
+              .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            if (matchingItems.length > 0) {
+              vendorItemCode = matchingItems[0].vendor_item_code;
+              break;
+            }
+          }
 
-          if (data?.vendor_item_code) {
-            return { ...item, vendor_item_code: data.vendor_item_code };
+          if (vendorItemCode) {
+            return { ...item, vendor_item_code: vendorItemCode };
           }
           return item;
-        })
-      );
-      setPurchaseItems(updatedItems);
+        });
+        setPurchaseItems(updatedItems);
+      }
     }
   };
 

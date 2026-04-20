@@ -60,32 +60,18 @@ export default function DeliveryPanel({ delivery, saleNumber, customerName, onCl
   }, [delivery]);
 
   const loadSaleItems = async () => {
-    const { data } = await supabase
-      .from('sale_items')
-      .select(`
-        id,
-        serial_number,
-        delivered,
-        assembly_units(
-          assemblies(assembly_name)
-        )
-      `)
-      .eq('sale_id', delivery.sale_id)
-      .order('created_at');
+    const { data: sale } = await api.sales.getById(delivery.sale_id);
 
-    if (data) {
-      setSaleItems(data as any);
+    if (sale && sale.sale_items) {
+      setSaleItems(sale.sale_items as any);
     }
   };
 
   const loadDeliveryItems = async () => {
-    const { data } = await supabase
-      .from('delivery_items')
-      .select('sale_item_id')
-      .eq('delivery_id', delivery.id);
+    const { data: deliveryData } = await api.deliveries.getById(delivery.id);
 
-    if (data) {
-      setSelectedItems(new Set(data.map(item => item.sale_item_id)));
+    if (deliveryData && deliveryData.delivery_items) {
+      setSelectedItems(new Set(deliveryData.delivery_items.map((item: any) => item.sale_item_id)));
     }
   };
 
@@ -111,47 +97,26 @@ export default function DeliveryPanel({ delivery, saleNumber, customerName, onCl
 
     setLoading(true);
     try {
-      const { error: deliveryError } = await supabase
-        .from('deliveries')
-        .update({
-          delivery_address: formData.delivery_address || null,
-          delivery_location: formData.delivery_location || null,
-          delivery_date: formData.delivery_date,
-          delivery_notes: formData.delivery_notes || null,
-          updated_by: userProfile?.id,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', delivery.id);
+      const { error: deliveryError } = await api.deliveries.update(delivery.id, {
+        delivery_address: formData.delivery_address || null,
+        delivery_location: formData.delivery_location || null,
+        delivery_date: formData.delivery_date,
+        delivery_notes: formData.delivery_notes || null,
+        updated_by: userProfile?.id,
+        updated_at: new Date().toISOString(),
+        items: Array.from(selectedItems).map(itemId => ({
+          delivery_id: delivery.id,
+          sale_item_id: itemId,
+        })),
+      } as any);
 
       if (deliveryError) throw deliveryError;
 
-      const { error: deleteError } = await supabase
-        .from('delivery_items')
-        .delete()
-        .eq('delivery_id', delivery.id);
-
-      if (deleteError) throw deleteError;
-
-      const deliveryItemsToInsert = Array.from(selectedItems).map(itemId => ({
-        delivery_id: delivery.id,
-        sale_item_id: itemId,
-      }));
-
-      const { error: insertError } = await supabase
-        .from('delivery_items')
-        .insert(deliveryItemsToInsert);
-
-      if (insertError) throw insertError;
-
-      // api call
-        user_id: userProfile?.id,
-        action: 'UPDATE_DELIVERY',
-        details: {
-          saleNumber,
-          customerName,
-          deliveryAddress: formData.delivery_address,
-          itemCount: selectedItems.size,
-        },
+      await api.activityLogs.create('UPDATE_DELIVERY', {
+        saleNumber,
+        customerName,
+        deliveryAddress: formData.delivery_address,
+        itemCount: selectedItems.size,
       });
 
       onSuccess();
@@ -175,24 +140,25 @@ export default function DeliveryPanel({ delivery, saleNumber, customerName, onCl
 
     setDelivering(true);
     try {
-      const { data, error } = await api.deliveries.fulfill(deliveryId, items);
+      const fulfillItems = Array.from(selectedItems).map(itemId => ({
+        item_id: itemId,
+        quantity: 1,
+      }));
+
+      const { data, error } = await api.deliveries.fulfill(delivery.id, fulfillItems);
 
       if (error) throw error;
 
-      if (data && !data.success) {
-        alert(data.error || 'Failed to fulfill delivery');
+      if (data && !(data as any).success) {
+        alert((data as any).error || 'Failed to fulfill delivery');
         return;
       }
 
-      // api call
-        user_id: userProfile?.id,
-        action: 'FULFILL_DELIVERY',
-        details: {
-          saleNumber,
-          customerName,
-          deliveryAddress: formData.delivery_address,
-          itemCount: selectedItems.size,
-        },
+      await api.activityLogs.create('FULFILL_DELIVERY', {
+        saleNumber,
+        customerName,
+        deliveryAddress: formData.delivery_address,
+        itemCount: selectedItems.size,
       });
 
       alert('Delivery fulfilled successfully! Stock has been updated.');

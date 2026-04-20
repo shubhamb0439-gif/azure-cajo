@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, X, ChevronRight, Book, HelpCircle, Lightbulb, Home } from 'lucide-react';
+import { api } from '../lib/api';
 
 interface HelpCategory {
   id: string;
@@ -46,7 +47,7 @@ export default function HelpChatbot({ isOpen, onClose }: HelpChatbotProps) {
   }, [searchQuery, articles, selectedType, selectedCategory]);
 
   const loadCategories = async () => {
-    // TODO: migrate this supabase call to api
+    const { data, error } = await api.help.getCategories();
 
     if (!error && data) {
       setCategories(data);
@@ -54,7 +55,7 @@ export default function HelpChatbot({ isOpen, onClose }: HelpChatbotProps) {
   };
 
   const loadArticles = async () => {
-    // TODO: migrate this supabase call to api
+    const { data, error } = await api.help.getArticles();
 
     if (!error && data) {
       setArticles(data);

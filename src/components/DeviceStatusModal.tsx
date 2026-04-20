@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Camera, Package, CheckCircle, Wifi, WifiOff, Truck, Settings, PlayCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { api } from '../lib/api';
 
 interface Device {
   id: string;
@@ -50,17 +51,15 @@ export default function DeviceStatusModal({ onClose }: DeviceStatusModalProps) {
     setError('');
 
     try {
-      let query = supabase
-
-        .or(`qr_code.eq.${identifier},device_serial_number.eq.${identifier}`);
-
-      if (userProfile?.customer_id) {
-        query = query.eq('customer_id', userProfile.customer_id);
-      }
-
-      const { data, error: fetchError } = await query.maybeSingle();
+      const { data: allDevices, error: fetchError } = userProfile?.customer_id
+        ? await api.devices.getByCustomer(userProfile.customer_id)
+        : await api.devices.getAll();
 
       if (fetchError) throw fetchError;
+
+      const data = allDevices?.find(
+        d => d.qr_code === identifier || d.device_serial_number === identifier
+      ) || null;
 
       if (!data) {
         const message = userProfile?.customer_id
@@ -119,7 +118,8 @@ export default function DeviceStatusModal({ onClose }: DeviceStatusModalProps) {
           break;
       }
 
-      // TODO: migrate this supabase call to api
+      const { error: updateError } = await api.devices.update(selectedDevice.id, updates);
+      if (updateError) throw updateError;
 
       setSuccess(true);
       setTimeout(() => {

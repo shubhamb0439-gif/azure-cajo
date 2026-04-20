@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { formatDateTime } from '../lib/dateUtils';
 import { Search, Filter } from 'lucide-react';
+import { api } from '../lib/api';
 
 interface ActivityLog {
   id: string;
@@ -44,8 +45,8 @@ export default function ActivityLog() {
 
   const loadLogs = async () => {
     setLoading(true);
-    // TODO: migrate this supabase call to api
-    if (data) setLogs(data as ActivityLog[]);
+    const res = await api.activityLogs.getAll();
+    if (res.data) setLogs(res.data as ActivityLog[]);
     setLoading(false);
   };
 

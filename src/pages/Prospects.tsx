@@ -252,7 +252,7 @@ export default function Prospects() {
 
   const loadProspects = async () => {
     setLoading(true);
-    api.prospects.getAll();
+    const { data, error } = await api.prospects.getAll();
 
     if (error) {
       console.error('Error loading prospects:', error);
@@ -264,7 +264,7 @@ export default function Prospects() {
       const userIds = [...new Set(data.map(p => p.assigned_to).filter(Boolean))];
 
       if (userIds.length > 0) {
-        api.users.getAll();
+        const { data: usersData } = await api.users.getAll();
 
         const userMap = new Map(usersData?.map(u => [u.auth_user_id, u.name]));
 
@@ -285,7 +285,7 @@ export default function Prospects() {
   };
 
   const loadUsers = async () => {
-    api.users.getAll();
+    const { data } = await api.users.getAll();
 
     if (data) {
       setUsers(data);
@@ -303,40 +303,32 @@ export default function Prospects() {
   };
 
   const logActivity = async (action: string, details: string) => {
-      // api call
-      action: action,
-      details: { message: details },
-      user_id: user?.id,
-    });
+    await api.activityLogs.create(action, { message: details });
   };
 
   const moveToCustomers = async (prospect: Prospect) => {
-    const { data: customerData, error: insertError } = await supabase
-      .from('customers')
-      .insert({
-        customer_name: prospect.prospect_name,
-        customer_email: prospect.prospect_email,
-        customer_phone: prospect.prospect_phone,
-        customer_company: prospect.prospect_company,
-        customer_position: prospect.prospect_position,
-        customer_status: 'active',
-        customer_source: prospect.prospect_source,
-        customer_value: prospect.prospect_value,
-        customer_notes: prospect.prospect_notes,
-        assigned_to: prospect.assigned_to,
-        created_by: user?.id,
-        updated_by: user?.id,
-        original_prospect_id: prospect.id,
-      })
-      .select()
-      .single();
+    const { data: customerData, error: insertError } = await api.customers.create({
+      customer_name: prospect.prospect_name,
+      customer_email: prospect.prospect_email,
+      customer_phone: prospect.prospect_phone,
+      customer_company: prospect.prospect_company,
+      customer_position: prospect.prospect_position,
+      customer_status: 'active',
+      customer_source: prospect.prospect_source,
+      customer_value: prospect.prospect_value,
+      customer_notes: prospect.prospect_notes,
+      assigned_to: prospect.assigned_to,
+      created_by: user?.id,
+      updated_by: user?.id,
+      original_prospect_id: prospect.id,
+    });
 
     if (insertError) {
       alert('Error moving to customers: ' + insertError.message);
       return false;
     }
 
-    api.prospects.getAll();
+    const { error: deleteError } = await api.prospects.delete(prospect.id);
 
     if (deleteError) {
       alert('Error removing prospect: ' + deleteError.message);
@@ -385,7 +377,7 @@ export default function Prospects() {
       return;
     }
 
-    api.prospects.getAll();
+    const { error } = await api.prospects.delete(prospect.id);
 
     if (error) {
       alert('Error deleting prospect: ' + error.message);
@@ -426,7 +418,7 @@ export default function Prospects() {
         return;
       }
 
-      api.prospects.getAll();
+      const { error } = await api.prospects.update(selectedProspect.id, prospectData);
 
       if (error) {
         alert('Error updating prospect: ' + error.message);
@@ -436,7 +428,7 @@ export default function Prospects() {
         loadProspects();
       }
     } else {
-      api.prospects.getAll();
+      const { error } = await api.prospects.create(prospectData);
 
       if (error) {
         alert('Error creating prospect: ' + error.message);

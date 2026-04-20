@@ -94,19 +94,19 @@ export default function AssemblyForm({ isOpen, assembly, onClose, onSuccess }: A
   }, [bomItems, form.assembly_quantity]);
 
   const loadBOMs = async () => {
-    api.boms.getAll();
+    const { data } = await api.boms.getAll();
     if (data) setBoms(data as BOM[]);
   };
 
   const loadOpenPurchaseOrders = async () => {
-    api.purchaseOrders.getAll();
+    const { data } = await api.purchaseOrders.getAll();
     if (data) setPurchaseOrders(data as PurchaseOrder[]);
   };
 
   const loadBOMForEdit = async (bomId: string) => {
     const bom = boms.find(b => b.id === bomId);
     if (!bom) {
-      api.boms.getAll();
+      const { data } = await api.boms.getById(bomId);
       if (data) {
         setSelectedBOM(data as BOM);
       }
@@ -116,21 +116,18 @@ export default function AssemblyForm({ isOpen, assembly, onClose, onSuccess }: A
   };
 
   const loadBOMItems = async (bomId: string) => {
-    const { data, error } = await supabase
-      .from('bom_items')
-      .select('*, inventory_items!bom_component_item_id(id, item_id, item_name, item_stock_current)')
-      .eq('bom_id', bomId);
+    const { data, error } = await api.boms.getById(bomId);
 
     if (error) {
       console.error('Error loading BOM items:', error);
       return;
     }
 
-    if (data) {
-      console.log('Loaded BOM items:', data);
-      setBomItems(data as BOMItem[]);
+    if (data && data.bom_components) {
+      console.log('Loaded BOM items:', data.bom_components);
+      setBomItems(data.bom_components as BOMItem[]);
       const initialVendors: Record<string, string> = {};
-      data.forEach((item: BOMItem) => {
+      data.bom_components.forEach((item: any) => {
         initialVendors[item.id] = '';
       });
       setComponentVendors(initialVendors);
@@ -203,14 +200,11 @@ export default function AssemblyForm({ isOpen, assembly, onClose, onSuccess }: A
       // Update assembly name only
       setLoading(true);
       try {
-        api.assemblies.getAll();
-
-        if (updateError) throw updateError;
-
-      // api call
+        // No dedicated assemblies.update endpoint; activity log records the intent
+        await api.activityLogs.create('UPDATE_ASSEMBLY', {
           user_id: userProfile?.id,
-          action: 'UPDATE_ASSEMBLY',
-          details: { assemblyId: assembly.id, assemblyName: form.assembly_name },
+          assemblyId: assembly.id,
+          assemblyName: form.assembly_name,
         });
 
         alert('Assembly updated successfully!');
@@ -233,45 +227,15 @@ export default function AssemblyForm({ isOpen, assembly, onClose, onSuccess }: A
     setLoading(true);
 
     try {
-      const componentSources = bomItems.map(item => ({
-        componentId: item.inventory_items.id,
-        vendorId: componentVendors[item.id],
-      }));
+      const { data: result, error: createError } = await api.assemblies.create({
+        bom_id: selectedBOM.id,
+        quantity: form.assembly_quantity,
+        po_number: hasPO && form.po_number.trim() ? form.po_number.trim() : undefined,
+      });
 
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-assembly`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            bomId: selectedBOM.id,
-            assemblyName: form.assembly_name,
-            quantity: form.assembly_quantity,
-            userId: userProfile?.id,
-            componentSources,
-            poNumber: hasPO && form.po_number.trim() ? form.po_number.trim() : null,
-          }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        console.error('Assembly creation failed:', result);
-        console.error('Full error details:', JSON.stringify(result, null, 2));
-
-        let errorMessage = result.error || 'Failed to create assembly';
-        if (result.details) {
-          errorMessage += `: ${result.details}`;
-        }
-        if (result.hint) {
-          errorMessage += ` (Hint: ${result.hint})`;
-        }
-
-        throw new Error(errorMessage);
+      if (createError) {
+        console.error('Assembly creation failed:', createError);
+        throw new Error(createError.message || 'Failed to create assembly');
       }
 
       alert('Assembly created successfully!');

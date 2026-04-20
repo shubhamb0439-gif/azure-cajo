@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Bug, Sparkles, Trash2, AlertCircle, CheckCircle, Clock, XCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { api } from '../../lib/api';
 
 interface SystemRequest {
   id: string;
@@ -57,25 +58,11 @@ export default function RequestsAdmin() {
 
   useEffect(() => {
     fetchRequests();
-
-    const channel = supabase
-      .channel('system_requests_changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'system_requests' },
-        () => {
-          fetchRequests();
-        }
-      )
-      .subscribe();
-
-    return () => {
-    };
   }, []);
 
   const fetchRequests = async () => {
     try {
-      // TODO: migrate this supabase call to api
+      const { data, error } = await api.systemRequests.getAll();
 
       if (error) throw error;
       setRequests(data || []);
@@ -90,9 +77,14 @@ export default function RequestsAdmin() {
     if (!userProfile) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await api.systemRequests.update(requestId, {
+        status: newStatus,
+        status_changed_at: new Date().toISOString(),
+        status_changed_by: userProfile.id,
+      });
 
       if (error) throw error;
+      fetchRequests();
     } catch (error) {
       console.error('Error updating status:', error);
       alert('Failed to update status. Please try again.');
@@ -103,7 +95,9 @@ export default function RequestsAdmin() {
     if (!confirm('Are you sure you want to delete this request?')) return;
 
     try {
-      // TODO: migrate this supabase call to api
+      const { error } = await api.systemRequests.delete(requestId);
+      if (error) throw error;
+      fetchRequests();
     } catch (error) {
       console.error('Error deleting request:', error);
       alert('Failed to delete request. Please try again.');

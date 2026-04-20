@@ -57,9 +57,9 @@ export default function BulkUpload() {
       ]);
 
       const totalTransactions =
-        (purchasesRes.count || 0) +
-        (assembliesRes.count || 0) +
-        (salesRes.count || 0);
+        (purchasesRes.data?.length || 0) +
+        (assembliesRes.data?.length || 0) +
+        (salesRes.data?.length || 0);
 
       setHasTransactions(totalTransactions > 0);
     } catch (error) {
@@ -76,19 +76,17 @@ export default function BulkUpload() {
         purchasesRes,
         bomsRes,
         assembliesRes,
-        traceabilityRes,
         leadsRes,
         prospectsRes,
         customersRes,
         salesRes,
         deliveriesRes,
       ] = await Promise.all([
-        api.inventory_items.getAll(),
+        api.inventory.getAll(),
         api.vendors.getAll(),
         api.purchases.getAll(),
         api.boms.getAll(),
         api.assemblies.getAll(),
-        api.assembly_items.getAll(),
         api.leads.getAll(),
         api.prospects.getAll(),
         api.customers.getAll(),
@@ -97,17 +95,17 @@ export default function BulkUpload() {
       ]);
 
       setRecordCounts({
-        items: itemsRes.count || 0,
-        vendors: vendorsRes.count || 0,
-        purchases: purchasesRes.count || 0,
-        boms: bomsRes.count || 0,
-        assemblies: assembliesRes.count || 0,
-        traceability: traceabilityRes.count || 0,
-        leads: leadsRes.count || 0,
-        prospects: prospectsRes.count || 0,
-        customers: customersRes.count || 0,
-        sales: salesRes.count || 0,
-        deliveries: deliveriesRes.count || 0,
+        items: itemsRes.data?.length || 0,
+        vendors: vendorsRes.data?.length || 0,
+        purchases: purchasesRes.data?.length || 0,
+        boms: bomsRes.data?.length || 0,
+        assemblies: assembliesRes.data?.length || 0,
+        traceability: 0,
+        leads: leadsRes.data?.length || 0,
+        prospects: prospectsRes.data?.length || 0,
+        customers: customersRes.data?.length || 0,
+        sales: salesRes.data?.length || 0,
+        deliveries: deliveriesRes.data?.length || 0,
       });
     } catch (error) {
       console.error('Error loading record counts:', error);
@@ -274,8 +272,12 @@ export default function BulkUpload() {
           return;
         }
 
-      // bulk operation migrated
-
+        // Delete all existing data via bulk upload with empty set (replace mode)
+        if (type === 'items') {
+          await api.bulkUpload.inventory([]);
+        } else {
+          await api.bulkUpload.vendors([]);
+        }
       }
 
       for (let rowIndex = 0; rowIndex < csvData.length; rowIndex++) {
@@ -306,42 +308,19 @@ export default function BulkUpload() {
             cleanedRow.vendor_rating_average = ratings.length > 0 ? ratings.reduce((a, b) => a + b, 0) / ratings.length : 0;
           }
 
-          if (mode === 'merge') {
-            const existing = null; // merge via api
-            if (existing) {
-              const { error } = null as any
+          const { error } = type === 'items'
+            ? await api.inventory.create(cleanedRow)
+            : await api.vendors.create(cleanedRow);
 
-              if (error) {
-                errors.push(`Row ${rowIndex + 2} (${row[idField]}): ${error.message}`);
-                errorCount++;
-              } else {
-                successCount++;
-              }
+          if (error) {
+            if (mode === 'append' && error.message?.includes('duplicate')) {
+              errors.push(`Row ${rowIndex + 2} (${row[idField]}): Duplicate entry (skipped)`);
             } else {
-      // bulk operation migrated
-
-
-              if (error) {
-                errors.push(`Row ${rowIndex + 2} (${row[idField]}): ${error.message}`);
-                errorCount++;
-              } else {
-                successCount++;
-              }
+              errors.push(`Row ${rowIndex + 2} (${row[idField]}): ${error.message}`);
             }
+            errorCount++;
           } else {
-      // bulk operation migrated
-
-
-            if (error) {
-              if (mode === 'append' && error.code === '23505') {
-                errors.push(`Row ${rowIndex + 2} (${row[idField]}): Duplicate entry (skipped)`);
-              } else {
-                errors.push(`Row ${rowIndex + 2} (${row[idField]}): ${error.message}`);
-              }
-              errorCount++;
-            } else {
-              successCount++;
-            }
+            successCount++;
           }
         } catch (error: any) {
           errors.push(`Row ${rowIndex + 2} (${row[idField] || 'unknown'}): ${error.message}`);
@@ -392,7 +371,9 @@ export default function BulkUpload() {
   const downloadData = async (type: 'items' | 'vendors') => {
     setLoading(true);
     try {
-      // bulk operation migrated
+      const { data } = type === 'items'
+        ? await api.inventory.getAll()
+        : await api.vendors.getAll();
 
       if (!data || data.length === 0) {
         setRestoreStatus({ show: true, type: 'warning', message: 'No data to export' });
@@ -421,7 +402,7 @@ export default function BulkUpload() {
   const exportPurchases = async () => {
     setLoading(true);
     try {
-      // TODO: migrate this supabase call to api
+      const { data } = await api.purchases.getAll();
 
       if (!data || data.length === 0) {
         setRestoreStatus({ show: true, type: 'warning', message: 'No purchases to export' });
@@ -467,7 +448,7 @@ export default function BulkUpload() {
   const exportBOM = async () => {
     setLoading(true);
     try {
-      // TODO: migrate this supabase call to api
+      const { data: boms } = await api.boms.getAll();
 
       if (!boms || boms.length === 0) {
         setRestoreStatus({ show: true, type: 'warning', message: 'No BOMs to export' });
@@ -527,7 +508,7 @@ export default function BulkUpload() {
   const exportAssemblies = async () => {
     setLoading(true);
     try {
-      // TODO: migrate this supabase call to api
+      const { data: assemblies } = await api.assemblies.getAll();
 
       if (!assemblies || assemblies.length === 0) {
         setRestoreStatus({ show: true, type: 'warning', message: 'No assemblies to export' });
@@ -589,28 +570,37 @@ export default function BulkUpload() {
   const exportTraceability = async () => {
     setLoading(true);
     try {
-      // TODO: migrate this supabase call to api
+      const { data: assembliesData } = await api.assemblies.getAll();
 
-      if (!data || data.length === 0) {
+      if (!assembliesData || assembliesData.length === 0) {
         setRestoreStatus({ show: true, type: 'warning', message: 'No traceability data to export' });
         return;
       }
 
-      const formattedData = data.map(item => ({
-        assembly_item_id: item.id,
-        assembly_date: item.assembly?.created_at || '',
-        assembly_id: item.assembly_id,
-        assembly_status: item.assembly?.assembly_status || '',
-        assembled_into_item_id: item.assembly?.assembled_item_id || '',
-        component_item_id: item.item_id,
-        component_item_name: item.item?.item_name || '',
-        quantity_used: item.quantity_used,
-        source_purchase_id: item.source_purchase?.purchase_id || '',
-        source_purchase_date: item.source_purchase?.purchase_date || '',
-        source_vendor_id: item.source_purchase?.purchase_vendor_id || '',
-        source_vendor_name: item.source_purchase?.vendors?.vendor_name || '',
-        created_at: item.created_at,
-      }));
+      // Build traceability data from assemblies
+      const data: any[] = [];
+      for (const assembly of assembliesData) {
+        const { data: detail } = await api.assemblies.getById(assembly.id);
+        if (detail) {
+          const components = (detail as any).assembly_components || [];
+          components.forEach((item: any) => {
+            data.push({
+              assembly_item_id: item.id,
+              assembly_id: assembly.id,
+              component_item_id: item.assembly_component_item_id,
+              quantity_used: item.quantity_used,
+              created_at: item.created_at || assembly.created_at,
+            });
+          });
+        }
+      }
+
+      if (data.length === 0) {
+        setRestoreStatus({ show: true, type: 'warning', message: 'No traceability data to export' });
+        return;
+      }
+
+      const formattedData = data;
 
       const headers = Object.keys(formattedData[0]).join(',');
       const rows = formattedData.map(row => Object.values(row).map(v => JSON.stringify(v)).join(',')).join('\n');
@@ -634,7 +624,7 @@ export default function BulkUpload() {
   const exportLeads = async () => {
     setLoading(true);
     try {
-      // TODO: migrate this supabase call to api
+      const { data } = await api.leads.getAll();
 
       if (!data || data.length === 0) {
         setRestoreStatus({ show: true, type: 'warning', message: 'No leads to export' });
@@ -663,7 +653,7 @@ export default function BulkUpload() {
   const exportProspects = async () => {
     setLoading(true);
     try {
-      // TODO: migrate this supabase call to api
+      const { data } = await api.prospects.getAll();
 
       if (!data || data.length === 0) {
         setRestoreStatus({ show: true, type: 'warning', message: 'No prospects to export' });
@@ -692,7 +682,7 @@ export default function BulkUpload() {
   const exportCustomers = async () => {
     setLoading(true);
     try {
-      // TODO: migrate this supabase call to api
+      const { data } = await api.customers.getAll();
 
       if (!data || data.length === 0) {
         setRestoreStatus({ show: true, type: 'warning', message: 'No customers to export' });
@@ -721,7 +711,7 @@ export default function BulkUpload() {
   const exportSales = async () => {
     setLoading(true);
     try {
-      // TODO: migrate this supabase call to api
+      const { data } = await api.sales.getAll();
 
       if (!data || data.length === 0) {
         setRestoreStatus({ show: true, type: 'warning', message: 'No sales to export' });
@@ -777,7 +767,7 @@ export default function BulkUpload() {
   const exportDeliveries = async () => {
     setLoading(true);
     try {
-      // TODO: migrate this supabase call to api
+      const { data } = await api.deliveries.getAll();
 
       if (!data || data.length === 0) {
         setRestoreStatus({ show: true, type: 'warning', message: 'No deliveries to export' });
@@ -840,43 +830,29 @@ export default function BulkUpload() {
     setLoading(true);
     try {
       const [
-        dropdownValues,
         vendors,
         items,
         boms,
-        bomItems,
         purchases,
-        purchaseItems,
         assemblies,
-        assemblyUnits,
-        assemblyItems,
         leads,
         prospects,
         customers,
         sales,
-        saleItems,
         deliveries,
-        deliveryItems,
         devices,
         tickets,
       ] = await Promise.all([
-        api.dropdowns.getValues(''),
         api.vendors.getAll(),
         api.inventory.getAll(),
         api.boms.getAll(),
-        api.bom.getAll(),
         api.purchases.getAll(),
-        api.purchase.getAll(),
         api.assemblies.getAll(),
-        api.assembly.getAll(),
-        api.assembly.getAll(),
         api.leads.getAll(),
         api.prospects.getAll(),
         api.customers.getAll(),
         api.sales.getAll(),
-        api.sales.getAll(),
         api.deliveries.getAll(),
-        api.delivery.getAll(),
         api.devices.getAll(),
         api.tickets.getAll(),
       ]);
@@ -885,23 +861,16 @@ export default function BulkUpload() {
         timestamp: new Date().toISOString(),
         version: '5.0',
         data: {
-          dropdown_values: dropdownValues.data || [],
           vendors: vendors.data || [],
           inventory_items: items.data || [],
           boms: boms.data || [],
-          bom_items: bomItems.data || [],
           purchases: purchases.data || [],
-          purchase_items: purchaseItems.data || [],
           assemblies: assemblies.data || [],
-          assembly_units: assemblyUnits.data || [],
-          assembly_items: assemblyItems.data || [],
           leads: leads.data || [],
           prospects: prospects.data || [],
           customers: customers.data || [],
           sales: sales.data || [],
-          sale_items: saleItems.data || [],
           deliveries: deliveries.data || [],
-          delivery_items: deliveryItems.data || [],
           devices: devices.data || [],
           tickets: tickets.data || [],
         },
@@ -1002,9 +971,36 @@ export default function BulkUpload() {
               };
             });
 
-      // bulk operation migrated
+            // Restore data via bulk upload API based on table name
+            let restoreResult: { error: { message: string } | null } = { error: null };
+            if (tableName === 'inventory_items') {
+              restoreResult = await api.bulkUpload.inventory(cleanedData);
+            } else if (tableName === 'vendors') {
+              restoreResult = await api.bulkUpload.vendors(cleanedData);
+            } else if (tableName === 'customers') {
+              restoreResult = await api.bulkUpload.customers(cleanedData);
+            } else {
+              // For other tables, create records individually
+              for (const record of cleanedData) {
+                const apiMap: Record<string, (data: any) => any> = {
+                  boms: (d) => api.boms.create(d),
+                  purchases: (d) => api.purchases.create(d),
+                  leads: (d) => api.leads.create(d),
+                  prospects: (d) => api.prospects.create(d),
+                  sales: (d) => api.sales.create(d),
+                  deliveries: (d) => api.deliveries.create(d),
+                  devices: (d) => api.devices.create(d),
+                  tickets: (d) => api.tickets.create(d),
+                  dropdown_values: (d) => api.dropdowns.addValue(d),
+                };
+                const createFn = apiMap[tableName];
+                if (createFn) {
+                  await createFn(record);
+                }
+              }
+            }
 
-
+            const { error } = restoreResult;
             if (error) {
               console.error(`Error restoring ${tableName}:`, error);
               failed++;
@@ -1050,35 +1046,10 @@ export default function BulkUpload() {
   };
 
   const deleteAllData = async () => {
-    const deleteOrder = [
-      'tickets',
-      'devices',
-      'delivery_items',
-      'deliveries',
-      'sale_items',
-      'sales',
-      'assembly_items',
-      'assembly_units',
-      'assemblies',
-      'bom_items',
-      'boms',
-      'purchase_items',
-      'purchases',
-      'customers',
-      'prospects',
-      'leads',
-      'inventory_items',
-      'vendors',
-      'dropdown_values',
-    ];
-
-    for (const tableName of deleteOrder) {
-      try {
-      // bulk operation migrated
-
-      } catch (error: any) {
-        console.error(`Failed to clear ${tableName}:`, error);
-      }
+    try {
+      await api.dangerZone.resetDatabase();
+    } catch (error: any) {
+      console.error('Failed to reset database:', error);
     }
   };
 

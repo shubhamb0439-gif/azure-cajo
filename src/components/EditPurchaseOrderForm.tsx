@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import SidePanel from './SidePanel';
+import { api } from '../lib/api';
 
 interface Customer {
   id: string;
@@ -88,7 +89,7 @@ export default function EditPurchaseOrderForm({ isOpen, onClose, order, onSucces
   }, [isOpen, order]);
 
   const loadBOMs = async () => {
-    // TODO: migrate this supabase call to api
+    const { data, error } = await api.boms.getAll();
 
     if (error) {
       console.error('Error loading BOMs:', error);
@@ -132,22 +133,22 @@ export default function EditPurchaseOrderForm({ isOpen, onClose, order, onSucces
     try {
       const poValue = calculatePOValue();
 
-      const { error: poError } = await supabase
-
-      if (poError) throw poError;
-
-      // TODO: migrate this supabase call to api
-
       const itemsToInsert = validItems.map(item => ({
         po_id: order.id,
         bom_id: item.bom_id,
         quantity: item.quantity,
-        unit_price: item.unit_price
+        unit_price: item.unit_price,
       }));
 
-      // TODO: migrate this supabase call to api
+      const { error: poError } = await api.purchaseOrders.update(order.id, {
+        delivery_date: deliveryDate || null,
+        payment_terms: paymentTerms,
+        notes,
+        po_value: poValue,
+        items: itemsToInsert,
+      });
 
-      if (itemsError) throw itemsError;
+      if (poError) throw poError;
 
       onSuccess();
       onClose();

@@ -96,16 +96,8 @@ export default function Inventory() {
       setItemSales({});
     };
 
-    const subscription = supabase
-      .channel('inventory_realtime_updates')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_items' }, handleInventoryChange)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_movements' }, handleStockMovement)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, handleDeliveryUpdate)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sale_items' }, handleDeliveryUpdate)
-      .subscribe();
-
     return () => {
-      subscription.unsubscribe();
+      // cleanup if needed
     };
   }, []);
 
@@ -158,15 +150,11 @@ export default function Inventory() {
     if (!confirm(`Are you sure you want to delete ${itemName}?`)) return;
 
     try {
-      await api.inventory.delete(id);
+      const { error } = await api.inventory.delete(id);
 
       if (error) throw error;
 
-      // api call
-        user_id: userProfile?.id,
-        action: 'DELETE_ITEM',
-        details: { itemName },
-      });
+      await api.activityLogs.create('DELETE_ITEM', { itemName });
 
       loadData();
     } catch (error) {
@@ -183,171 +171,132 @@ export default function Inventory() {
       newExpanded.add(itemId);
 
       if (!itemPurchases[itemId]) {
-        const { data } = await supabase
-          .from('purchase_items')
-          .select(`
-            id,
-            quantity,
-            quantity_received,
-            unit_cost,
-            lead_time,
-            vendor_item_code,
-            received,
-            purchases!inner(
-              purchase_date,
-              purchase_po_number,
-              vendors!purchases_purchase_vendor_id_fkey(vendor_name)
-            )
-          `)
-          .eq('item_id', itemId)
-          .order('purchases(purchase_date)', { ascending: false });
-
-        if (data) {
-          const purchases: PurchaseItemHistory[] = data.map((p: any) => ({
-            id: p.id,
-            quantity: p.quantity,
-            quantity_received: p.quantity_received || 0,
-            unit_cost: p.unit_cost,
-            lead_time: p.lead_time,
-            vendor_item_code: p.vendor_item_code,
-            received: p.received,
-            purchase_date: p.purchases.purchase_date,
-            purchase_po_number: p.purchases.purchase_po_number,
-            vendor_name: p.purchases.vendors?.vendor_name || null,
-          }));
-          setItemPurchases(prev => ({ ...prev, [itemId]: purchases }));
+        try {
+          const { data: purchasesData } = await api.purchases.getAll();
+          if (purchasesData) {
+            const purchases: PurchaseItemHistory[] = [];
+            for (const purchase of purchasesData) {
+              for (const item of (purchase.purchase_items || [])) {
+                if ((item as any).item_id === itemId) {
+                  purchases.push({
+                    id: item.id,
+                    quantity: (item as any).quantity,
+                    quantity_received: (item as any).quantity_received || 0,
+                    unit_cost: (item as any).unit_cost,
+                    lead_time: (item as any).lead_time,
+                    vendor_item_code: (item as any).vendor_item_code,
+                    received: (item as any).received,
+                    purchase_date: (purchase as any).purchase_date,
+                    purchase_po_number: (purchase as any).purchase_po_number,
+                    vendor_name: (purchase as any).vendors?.vendor_name || null,
+                  });
+                }
+              }
+            }
+            setItemPurchases(prev => ({ ...prev, [itemId]: purchases }));
+          } else {
+            setItemPurchases(prev => ({ ...prev, [itemId]: [] }));
+          }
+        } catch {
+          setItemPurchases(prev => ({ ...prev, [itemId]: [] }));
         }
       }
 
       if (!itemAssemblies[itemId]) {
-        const { data } = await supabase
-          .from('assemblies')
-          .select(`
-            id,
-            assembly_name,
-            assembly_quantity,
-            created_at,
-            boms!inner(bom_name, bom_item_id),
-            users!assemblies_created_by_fkey(name)
-          `)
-          .eq('boms.bom_item_id', itemId)
-          .order('created_at', { ascending: false });
-
-        if (data) {
-          const assemblies: AssemblyHistory[] = data.map((a: any) => ({
-            id: a.id,
-            assembly_name: a.assembly_name,
-            assembly_quantity: a.assembly_quantity,
-            created_at: a.created_at,
-            bom_name: a.boms.bom_name,
-            created_by_name: a.users?.name || null,
-          }));
-          setItemAssemblies(prev => ({ ...prev, [itemId]: assemblies }));
+        try {
+          const { data: assembliesAllData } = await api.assemblies.getAll();
+          if (assembliesAllData) {
+            const filtered = (assembliesAllData as any[]).filter(a => a.boms?.bom_item_id === itemId);
+            const assemblies: AssemblyHistory[] = filtered.map((a: any) => ({
+              id: a.id,
+              assembly_name: a.assembly_name,
+              assembly_quantity: a.assembly_quantity,
+              created_at: a.created_at,
+              bom_name: a.boms?.bom_name || '',
+              created_by_name: a.users?.name || null,
+            }));
+            setItemAssemblies(prev => ({ ...prev, [itemId]: assemblies }));
+          } else {
+            setItemAssemblies(prev => ({ ...prev, [itemId]: [] }));
+          }
+        } catch {
+          setItemAssemblies(prev => ({ ...prev, [itemId]: [] }));
         }
       }
 
       if (!itemUsages[itemId]) {
-        const { data: bomItemsData } = await supabase
-          .from('bom_items')
-          .select('id, bom_id, bom_component_quantity')
-          .eq('bom_component_item_id', itemId);
+        try {
+          const { data: bomsData } = await api.boms.getAll();
+          const { data: assembliesData } = await api.assemblies.getAll();
 
-        if (bomItemsData && bomItemsData.length > 0) {
-          const bomIds = bomItemsData.map(bi => bi.bom_id);
-
-          api.assemblies.getAll();
-
-          if (assembliesData) {
-            const usages: UsageHistory[] = [];
-
-            for (const assembly of assembliesData) {
-              const bomItem = bomItemsData.find(bi => bi.bom_id === assembly.bom_id);
-              if (!bomItem) continue;
-
-              const quantityUsed = bomItem.bom_component_quantity * assembly.assembly_quantity;
-
-              const { data: assemblyItemData } = await supabase
-                .from('assembly_items')
-                .select('vendor_id, source_type, vendors(vendor_name)')
-                .eq('assembly_id', assembly.id)
-                .eq('assembly_component_item_id', itemId)
-                .maybeSingle();
-
-              usages.push({
-                id: assembly.id,
-                assembly_name: assembly.assembly_name,
-                quantity_used: quantityUsed,
-                created_at: assembly.created_at,
-                bom_name: assembly.boms.bom_name,
-                vendor_name: assemblyItemData?.vendors?.vendor_name || 'Cajo Technologies',
-                source_type: assemblyItemData?.source_type || null,
-              });
+          if (bomsData && assembliesData) {
+            const relevantBomComponents: { bom_id: string; bom_component_quantity: number }[] = [];
+            for (const bom of bomsData) {
+              for (const comp of ((bom as any).bom_components || [])) {
+                if (comp.bom_component_item_id === itemId) {
+                  relevantBomComponents.push({
+                    bom_id: (bom as any).id,
+                    bom_component_quantity: comp.bom_component_quantity,
+                  });
+                }
+              }
             }
 
-            setItemUsages(prev => ({ ...prev, [itemId]: usages }));
+            if (relevantBomComponents.length > 0) {
+              const usages: UsageHistory[] = [];
+              for (const assembly of assembliesData) {
+                const bomItem = relevantBomComponents.find(bi => bi.bom_id === (assembly as any).bom_id);
+                if (!bomItem) continue;
+
+                const quantityUsed = bomItem.bom_component_quantity * assembly.assembly_quantity;
+                usages.push({
+                  id: assembly.id,
+                  assembly_name: assembly.assembly_name,
+                  quantity_used: quantityUsed,
+                  created_at: assembly.created_at,
+                  bom_name: (assembly as any).boms?.bom_name || '',
+                  vendor_name: 'Cajo Technologies',
+                  source_type: null,
+                });
+              }
+              setItemUsages(prev => ({ ...prev, [itemId]: usages }));
+            } else {
+              setItemUsages(prev => ({ ...prev, [itemId]: [] }));
+            }
+          } else {
+            setItemUsages(prev => ({ ...prev, [itemId]: [] }));
           }
-        } else {
+        } catch {
           setItemUsages(prev => ({ ...prev, [itemId]: [] }));
         }
       }
 
-      const { data: salesData } = await supabase
-        .from('stock_movements')
-        .select(`
-          id,
-          quantity_change,
-          created_at,
-          reference_id
-        `)
-        .eq('inventory_item_id', itemId)
-        .eq('movement_type', 'sale')
-        .order('created_at', { ascending: false });
-
-      if (salesData && salesData.length > 0) {
-        const saleIds = [...new Set(salesData.map(s => s.reference_id))];
-
-        const { data: saleDetailsData } = await supabase
-          .from('sales')
-          .select(`
-            id,
-            sale_number,
-            sale_date,
-            customers(customer_name),
-            sale_items(
-              id,
-              serial_number,
-              delivered,
-              assembly_units(
-                assemblies(assembly_name)
-              )
-            ),
-            deliveries(delivered_at)
-          `)
-          .in('id', saleIds);
-
-        if (saleDetailsData) {
+      try {
+        const { data: allSalesData } = await api.sales.getAll();
+        if (allSalesData && allSalesData.length > 0) {
           const sales: SalesHistory[] = [];
-          for (const sale of saleDetailsData) {
-            const saleMovements = salesData.filter(sm => sm.reference_id === sale.id);
-            for (const item of (sale.sale_items as any[])) {
+          for (const sale of allSalesData) {
+            for (const item of ((sale as any).sale_items || [])) {
               if (item.delivered) {
                 sales.push({
                   id: sale.id,
-                  sale_number: sale.sale_number,
-                  customer_name: (sale.customers as any)?.customer_name || 'Unknown',
+                  sale_number: (sale as any).sale_number,
+                  customer_name: (sale as any).customers?.customer_name || 'Unknown',
                   assembly_name: (item.assembly_units as any)?.assemblies?.assembly_name || 'Unknown',
                   serial_number: item.serial_number,
-                  quantity_sold: Math.abs(saleMovements.reduce((sum, sm) => sum + Number(sm.quantity_change), 0)),
-                  sale_date: sale.sale_date,
+                  quantity_sold: 1,
+                  sale_date: (sale as any).sale_date,
                   delivered: item.delivered,
-                  delivered_at: (sale.deliveries as any[])?.[0]?.delivered_at || null,
+                  delivered_at: (sale as any).deliveries?.[0]?.delivered_at || null,
                 });
               }
             }
           }
           setItemSales(prev => ({ ...prev, [itemId]: sales }));
+        } else {
+          setItemSales(prev => ({ ...prev, [itemId]: [] }));
         }
-      } else {
+      } catch {
         setItemSales(prev => ({ ...prev, [itemId]: [] }));
       }
     }
@@ -816,25 +765,17 @@ function ItemFormPanel({ item, groups, classes, onClose, onSuccess }: ItemFormPa
 
     try {
       if (item) {
-        api.inventory.getAll();
+        const { error } = await api.inventory.update(item.id, formData);
 
         if (error) throw error;
 
-      // api call
-          user_id: userProfile?.id,
-          action: 'UPDATE_ITEM',
-          details: { itemId: item.item_id, itemName: formData.item_name },
-        });
+        await api.activityLogs.create('UPDATE_ITEM', { itemId: item.item_id, itemName: formData.item_name });
       } else {
-        api.inventory.getAll();
+        const { error } = await api.inventory.create(formData);
 
         if (error) throw error;
 
-      // api call
-          user_id: userProfile?.id,
-          action: 'CREATE_ITEM',
-          details: { itemId: formData.item_id, itemName: formData.item_name },
-        });
+        await api.activityLogs.create('CREATE_ITEM', { itemId: formData.item_id, itemName: formData.item_name });
       }
 
       onSuccess();

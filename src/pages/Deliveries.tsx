@@ -49,42 +49,11 @@ export default function Deliveries() {
 
   useEffect(() => {
     loadDeliveries();
-
-    const subscription = supabase
-      .channel('deliveries_realtime_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, loadDeliveries)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'delivery_items' }, loadDeliveries)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sale_items' }, loadDeliveries)
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   const loadDeliveries = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('deliveries')
-      .select(`
-        *,
-        delivery_items(
-          sale_item_id,
-          sale_items(
-            id,
-            serial_number,
-            assembly_units(
-              assemblies(assembly_name)
-            )
-          )
-        ),
-        sales(
-          sale_number,
-          sale_date,
-          customers(customer_name, customer_company)
-        )
-      `)
-      .order('created_at', { ascending: false });
+    const { data } = await api.deliveries.getAll();
 
     if (data) {
       setDeliveries(data as any);
@@ -106,27 +75,16 @@ export default function Deliveries() {
       return;
     }
 
-    api.deliveries.getAll();
+    const { error: deliveryError } = await api.deliveries.delete(delivery.id);
 
     if (deliveryError) {
       alert('Error deleting delivery: ' + deliveryError.message);
       return;
     }
 
-    api.sales.getAll();
-
-    if (saleError) {
-      alert('Error updating sale: ' + saleError.message);
-      return;
-    }
-
-      // api call
-      user_id: userProfile?.id,
-      action: 'DELETE_DELIVERY',
-      details: {
-        saleNumber: delivery.sales.sale_number,
-        customerName: delivery.sales.customers.customer_name,
-      },
+    await api.activityLogs.create('DELETE_DELIVERY', {
+      saleNumber: delivery.sales.sale_number,
+      customerName: delivery.sales.customers.customer_name,
     });
 
     loadDeliveries();

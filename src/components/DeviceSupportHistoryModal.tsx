@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Camera, Keyboard, Clock, Calendar, Wifi, WifiOff, TrendingUp, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { api } from '../lib/api';
 import QRScanner from './QRScanner';
 
 interface Device {
@@ -52,7 +53,7 @@ export default function DeviceSupportHistoryModal({ onClose, device }: DeviceSup
 
   const loadTicketsForDevice = async (deviceId: string) => {
     try {
-      // TODO: migrate this supabase call to api
+      const { data: ticketsData, error: ticketsError } = await api.tickets.getByDevice(deviceId);
 
       if (ticketsError) throw ticketsError;
       setTickets(ticketsData || []);
@@ -74,20 +75,18 @@ export default function DeviceSupportHistoryModal({ onClose, device }: DeviceSup
     setError('');
 
     try {
-      let query = supabase
-
-        .or(`qr_code.eq.${identifier},device_serial_number.eq.${identifier}`);
-
-      if (userProfile?.customer_id) {
-        query = query.eq('customer_id', userProfile.customer_id);
-      }
-
-      const { data: deviceData, error: fetchError } = await query.maybeSingle();
+      const { data: allDevices, error: fetchError } = userProfile?.customer_id
+        ? await api.devices.getByCustomer(userProfile.customer_id)
+        : await api.devices.getAll();
 
       if (fetchError) {
         console.error('Device fetch error:', fetchError);
         throw fetchError;
       }
+
+      const deviceData = allDevices?.find(
+        d => d.qr_code === identifier || d.device_serial_number === identifier
+      ) || null;
 
       if (!deviceData) {
         const message = userProfile?.customer_id
@@ -100,7 +99,7 @@ export default function DeviceSupportHistoryModal({ onClose, device }: DeviceSup
 
       setSelectedDevice(deviceData);
 
-      // TODO: migrate this supabase call to api
+      const { data: ticketsData, error: ticketsError } = await api.tickets.getByDevice(deviceData.id);
 
       if (ticketsError) {
         console.error('Tickets fetch error:', ticketsError);

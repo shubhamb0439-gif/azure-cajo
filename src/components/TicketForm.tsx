@@ -56,7 +56,7 @@ export default function TicketForm({ mode, onClose, onSuccess }: TicketFormProps
 
   const fetchIssueTypes = async () => {
     try {
-      // TODO: migrate this supabase call to api
+      const { data, error } = await api.devices.getIssueTypes();
 
       if (error) throw error;
       setIssueTypes(data || []);
@@ -69,10 +69,10 @@ export default function TicketForm({ mode, onClose, onSuccess }: TicketFormProps
     if (!userProfile?.customer_id) return;
 
     try {
-      // TODO: migrate this supabase call to api
+      const { data, error } = await api.tickets.getByCustomer(userProfile.customer_id);
 
       if (error) throw error;
-      setOpenTickets(data || []);
+      setOpenTickets((data || []).filter((t: any) => t.status === 'open') as Ticket[]);
     } catch (err) {
       console.error('Error fetching open tickets:', err);
     }
@@ -96,25 +96,20 @@ export default function TicketForm({ mode, onClose, onSuccess }: TicketFormProps
         let willAutoCreateTicket = false;
 
         if (hasDevice && deviceSerialNumber) {
-          // TODO: migrate this supabase call to api
+          const { data: devices } = await api.devices.getByCustomer(userProfile.customer_id);
+          const device = (devices || []).find((d: any) => d.device_serial_number === deviceSerialNumber);
 
           if (!device) {
-            // TODO: migrate this supabase call to api
-
-            console.log('Sale item query result:', { saleItem, saleError, deviceSerialNumber, customerId: userProfile.customer_id });
-
-            if (!saleItem) {
-              setError('Device not found. Please check the serial number and try again.');
-              setLoading(false);
-              return;
-            }
+            setError('Device not found. Please check the serial number and try again.');
+            setLoading(false);
+            return;
           } else {
             deviceId = device.id;
 
             if (isDeviceOffline && device.status !== 'offline') {
               willAutoCreateTicket = true;
 
-              await supabase
+              await api.devices.updateStatus(device.id, 'offline', 'Device reported offline by customer');
 
               await new Promise(resolve => setTimeout(resolve, 1000));
             }
@@ -130,15 +125,16 @@ export default function TicketForm({ mode, onClose, onSuccess }: TicketFormProps
             description || ''
           ].filter(Boolean).join('\n\n');
 
-          // TODO: migrate this supabase call to api
+          const { data: deviceTickets } = await api.tickets.getByDevice(deviceId!);
+          const existingTicket = (deviceTickets || []).find((t: any) => t.status === 'open');
 
           if (existingTicket && additionalInfo.trim()) {
             const updatedDescription = existingTicket.description + '\n\n--- Additional Details ---\n' + additionalInfo;
 
-            await supabase
+            await api.tickets.update(existingTicket.id, { description: updatedDescription });
 
           } else if (existingTicket && priority !== 'high') {
-            await supabase
+            await api.tickets.update(existingTicket.id, { priority });
 
           }
         } else {
@@ -175,16 +171,20 @@ export default function TicketForm({ mode, onClose, onSuccess }: TicketFormProps
 
         const selectedTicket = openTickets.find(t => t.id === selectedTicketId);
 
-        const { error: ticketError } = await supabase
+        const { error: ticketError } = await api.tickets.update(selectedTicketId, {
+          status: 'closed',
+          resolution_notes: resolutionNotes || null,
+          closed_at: new Date().toISOString(),
+        });
 
         if (ticketError) throw ticketError;
 
         if (selectedTicket?.device_serial_number) {
-          // TODO: migrate this supabase call to api
+          const { data: devices } = await api.devices.getByCustomer(userProfile.customer_id);
+          const device = (devices || []).find((d: any) => d.device_serial_number === selectedTicket.device_serial_number);
 
           if (device) {
-            await supabase
-
+            await api.devices.updateStatus(device.id, 'online', 'Device back online - ticket closed');
           }
         }
       }

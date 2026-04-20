@@ -89,13 +89,24 @@ export default function SalesPanel({ customerId, customerName, sale, onClose, on
   }, [sale]);
 
   const loadAvailableUnits = async () => {
-    // TODO: migrate this supabase call to api
+    const { data: assemblies } = await api.assemblies.getAll();
 
-    if (!units) return;
+    if (!assemblies) return;
 
-    // TODO: migrate this supabase call to api
+    const units: any[] = [];
+    for (const assembly of assemblies) {
+      const { data: detail } = await api.assemblies.getById(assembly.id);
+      if (detail?.assembly_units) {
+        for (const unit of detail.assembly_units) {
+          units.push({ ...unit, assemblies: { assembly_name: detail.assembly_name } });
+        }
+      }
+    }
 
-    const soldIds = new Set((soldUnits || []).map(item => item.assembly_unit_id));
+    const { data: allSales } = await api.sales.getAll();
+    const soldUnits = (allSales || []).flatMap((s: any) => s.sale_items || []);
+
+    const soldIds = new Set((soldUnits || []).map((item: any) => item.assembly_unit_id));
 
     const available = units
       .filter(unit => {
@@ -117,8 +128,8 @@ export default function SalesPanel({ customerId, customerName, sale, onClose, on
   };
 
   const loadOpenPurchaseOrders = async () => {
-    // TODO: migrate this supabase call to api
-    if (data) setPurchaseOrders(data as PurchaseOrder[]);
+    const { data } = await api.purchaseOrders.getAll();
+    if (data) setPurchaseOrders((data as any[]).filter((po: any) => po.status === 'open') as PurchaseOrder[]);
   };
 
   const addSaleItem = () => {
@@ -191,44 +202,42 @@ export default function SalesPanel({ customerId, customerName, sale, onClose, on
       const saleValue = calculateSaleValue();
 
       if (sale) {
-        const { error: updateError } = await supabase
+        const items = saleItems.map(item => ({
+          assembly_unit_id: item.assembly_unit_id,
+          serial_number: item.serial_number,
+          unit_price: hasPO ? 0 : item.unit_price,
+          quantity: item.quantity,
+        }));
+
+        const { error: updateError } = await api.sales.update(sale.id, {
+          sale_date: formData.sale_date,
+          sale_notes: formData.sale_notes || null,
+          po_number: hasPO ? formData.po_number : null,
+          sale_value: saleValue,
+          items,
+        } as any);
 
         if (updateError) throw updateError;
 
-        /* sale items deleted via api */
-
-        const itemsToInsert = saleItems.map(item => ({
-          sale_id: sale.id,
-          assembly_unit_id: item.assembly_unit_id,
-          serial_number: item.serial_number,
-          unit_price: hasPO ? 0 : item.unit_price,
-          quantity: item.quantity,
-        }));
-
-        // TODO: migrate this supabase call to api
-
-        if (itemsError) throw itemsError;
-
         await api.activityLogs.create('ACTION', {});
       } else {
-        const { data: saleNumberData } = await api.sales.getAll();
-        const saleNumber = saleNumberData || 'SALE-0001';
-
-        // TODO: migrate this supabase call to api
-
-        if (saleError) throw saleError;
-
-        const itemsToInsert = saleItems.map(item => ({
-          sale_id: newSale.id,
+        const items = saleItems.map(item => ({
           assembly_unit_id: item.assembly_unit_id,
           serial_number: item.serial_number,
           unit_price: hasPO ? 0 : item.unit_price,
           quantity: item.quantity,
         }));
 
-        // TODO: migrate this supabase call to api
+        const { error: saleError } = await api.sales.create({
+          customer_id: customerId,
+          sale_date: formData.sale_date,
+          sale_notes: formData.sale_notes || null,
+          po_number: hasPO ? formData.po_number : null,
+          sale_value: saleValue,
+          items,
+        } as any);
 
-        if (itemsError) throw itemsError;
+        if (saleError) throw saleError;
 
         await api.activityLogs.create('ACTION', {});
       }

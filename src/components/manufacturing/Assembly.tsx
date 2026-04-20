@@ -60,7 +60,7 @@ export default function Assembly() {
   const loadData = async () => {
     setLoading(true);
     try {
-      api.assemblies.getAll();
+      const { data, error } = await api.assemblies.getAll();
 
       if (error) {
         console.error('Error loading assemblies:', error);
@@ -80,31 +80,10 @@ export default function Assembly() {
     if (!confirm(`Delete assembly "${name}"? This will restore components and remove finished goods from inventory.`)) return;
 
     try {
-      const { data: { session } } =      // api call
-      const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reverse-assembly`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-          },
-          body: JSON.stringify({
-            assemblyId: id,
-            userId: userProfile?.id,
-          }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to delete assembly');
+      const { error } = await api.assemblies.reverse(id);
+      if (error) {
+        throw new Error(error.message || 'Failed to delete assembly');
       }
-
       alert('Assembly deleted successfully!');
       loadData();
     } catch (error) {
@@ -122,17 +101,13 @@ export default function Assembly() {
       if (!assemblyComponents[assemblyId]) {
         const assembly = assemblies.find(a => a.id === assemblyId);
         if (assembly) {
-          const { data: bomItems } = await supabase
-            .from('bom_items')
-            .select('*, inventory_items(item_id, item_name)')
-            .eq('bom_id', assembly.bom_id);
-
-          if (bomItems) {
-            const components: AssemblyComponent[] = bomItems.map((item: any) => ({
-              item_id: item.inventory_items.item_id,
-              item_name: item.inventory_items.item_name,
-              quantity_per_unit: item.bom_component_quantity,
-              total_used: item.bom_component_quantity * assembly.assembly_quantity,
+          const { data: bomData } = await api.boms.getById(assembly.bom_id);
+          if (bomData && bomData.bom_components) {
+            const components: AssemblyComponent[] = bomData.bom_components.map((item: any) => ({
+              item_id: item.item_id || item.inventory_items?.item_id || '',
+              item_name: item.item_name || item.inventory_items?.item_name || '',
+              quantity_per_unit: item.bom_component_quantity || item.quantity || 0,
+              total_used: (item.bom_component_quantity || item.quantity || 0) * assembly.assembly_quantity,
               source_type: null,
               vendor_name: null,
             }));
@@ -146,10 +121,7 @@ export default function Assembly() {
 
   const handlePrintPicklist = async (assembly: Assembly) => {
     try {
-      const { data: bomItems, error } = await supabase
-        .from('bom_items')
-        .select('*, inventory_items(item_id, item_name)')
-        .eq('bom_id', assembly.bom_id);
+      const { data: bomData, error } = await api.boms.getById(assembly.bom_id);
 
       if (error) {
         console.error('Error fetching BOM items:', error);
@@ -157,16 +129,16 @@ export default function Assembly() {
         return;
       }
 
-      if (!bomItems || bomItems.length === 0) {
+      if (!bomData || !bomData.bom_components || bomData.bom_components.length === 0) {
         alert('No components found for this BOM');
         return;
       }
 
-      const components = bomItems.map((item: any) => ({
-        item_id: item.inventory_items.item_id,
-        item_name: item.inventory_items.item_name,
-        quantity_per_unit: item.bom_component_quantity,
-        total_quantity: item.bom_component_quantity * assembly.assembly_quantity,
+      const components = bomData.bom_components.map((item: any) => ({
+        item_id: item.item_id || item.inventory_items?.item_id || '',
+        item_name: item.item_name || item.inventory_items?.item_name || '',
+        quantity_per_unit: item.bom_component_quantity || item.quantity || 0,
+        total_quantity: (item.bom_component_quantity || item.quantity || 0) * assembly.assembly_quantity,
       }));
 
       const picklistPages = Array.from({ length: assembly.assembly_quantity }, (_, i) => i + 1)
@@ -354,10 +326,7 @@ export default function Assembly() {
 
   const handlePrintChecklist = async (assembly: Assembly) => {
     try {
-      const { data: bomItems, error } = await supabase
-        .from('bom_items')
-        .select('*, inventory_items(item_id, item_name)')
-        .eq('bom_id', assembly.bom_id);
+      const { data: bomData, error } = await api.boms.getById(assembly.bom_id);
 
       if (error) {
         console.error('Error fetching BOM items:', error);
@@ -365,16 +334,16 @@ export default function Assembly() {
         return;
       }
 
-      if (!bomItems || bomItems.length === 0) {
+      if (!bomData || !bomData.bom_components || bomData.bom_components.length === 0) {
         alert('No components found for this BOM');
         return;
       }
 
-      const components = bomItems.map((item: any) => ({
-        item_id: item.inventory_items.item_id,
-        item_name: item.inventory_items.item_name,
-        quantity_per_unit: item.bom_component_quantity,
-        total_quantity: item.bom_component_quantity * assembly.assembly_quantity,
+      const components = bomData.bom_components.map((item: any) => ({
+        item_id: item.item_id || item.inventory_items?.item_id || '',
+        item_name: item.item_name || item.inventory_items?.item_name || '',
+        quantity_per_unit: item.bom_component_quantity || item.quantity || 0,
+        total_quantity: (item.bom_component_quantity || item.quantity || 0) * assembly.assembly_quantity,
       }));
 
       const checklistPages = Array.from({ length: assembly.assembly_quantity }, (_, i) => i + 1)

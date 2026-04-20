@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import SidePanel from './SidePanel';
+import { api } from '../lib/api';
 
 interface Customer {
   id: string;
@@ -51,12 +52,12 @@ export default function PurchaseOrderForm({ isOpen, onClose, customer, onSuccess
   }, [isOpen]);
 
   const loadBOMs = async () => {
-    // TODO: migrate this supabase call to api
+    const { data, error } = await api.boms.getAll();
 
     if (error) {
       console.error('Error loading BOMs:', error);
     } else {
-      setBoms(data || []);
+      setBoms((data as BOM[]) || []);
     }
   };
 
@@ -101,20 +102,23 @@ export default function PurchaseOrderForm({ isOpen, onClose, customer, onSuccess
     try {
       const poValue = calculatePOValue();
 
-      // TODO: migrate this supabase call to api
+      const { error: poError } = await api.purchaseOrders.create({
+        po_number: poNumber,
+        customer_id: customer.id,
+        po_value: poValue,
+        delivery_date: deliveryDate || null,
+        payment_terms: paymentTerms || null,
+        notes: notes || null,
+        status: 'Open',
+        created_by: userProfile?.id,
+        items: validItems.map(item => ({
+          bom_id: item.bom_id,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+        })),
+      });
 
       if (poError) throw poError;
-
-      const itemsToInsert = validItems.map(item => ({
-        po_id: po.id,
-        bom_id: item.bom_id,
-        quantity: item.quantity,
-        unit_price: item.unit_price
-      }));
-
-      // TODO: migrate this supabase call to api
-
-      if (itemsError) throw itemsError;
 
       setPoNumber('');
       setDeliveryDate('');

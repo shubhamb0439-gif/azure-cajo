@@ -57,7 +57,7 @@ export default function MessagingPanel({ isOpen, onClose, onUnreadCountChange, u
   }, [messages]);
 
   const fetchUsers = async () => {
-    // TODO: migrate this supabase call to api
+    const { data } = await api.users.getAll();
 
     if (data) setUsers(data);
   };
@@ -68,21 +68,15 @@ export default function MessagingPanel({ isOpen, onClose, onUnreadCountChange, u
     setLoading(true);
 
     try {
-      // TODO: migrate this supabase call to api
+      const { data: messagesData } = await api.messaging.getMessages(selectedUser.id);
 
       if (messagesData) {
-        const messageIds = messagesData.map(m => m.id);
-
-        // TODO: migrate this supabase call to api
-
-        // TODO: migrate this supabase call to api
-
         const messagesWithDetails = messagesData.map(msg => ({
           ...msg,
-          sender: msg.sender as unknown as User,
-          receiver: msg.receiver as unknown as User,
-          attachments: attachmentsData?.filter(a => a.message_id === msg.id) || [],
-          is_read: readMessageIds.has(msg.id) || msg.sender_id === userProfile.id,
+          sender: {} as User,
+          receiver: {} as User,
+          attachments: [] as MessageAttachment[],
+          is_read: msg.sender_id === userProfile.id,
         }));
 
         const unreadMessages = messagesWithDetails.filter(
@@ -90,12 +84,9 @@ export default function MessagingPanel({ isOpen, onClose, onUnreadCountChange, u
         );
 
         if (unreadMessages.length > 0) {
-          const reads = unreadMessages.map(m => ({
-            message_id: m.id,
-            user_id: userProfile.id,
-          }));
+          const unreadIds = unreadMessages.map(m => m.id);
 
-          // TODO: migrate this supabase call to api
+          await api.messaging.markRead(unreadIds);
 
           messagesWithDetails.forEach(msg => {
             if (unreadMessages.some(um => um.id === msg.id)) {
@@ -117,69 +108,17 @@ export default function MessagingPanel({ isOpen, onClose, onUnreadCountChange, u
   const subscribeToMessages = () => {
     if (!userProfile) return () => {};
 
-    const channel = supabase
-      .channel('messages-realtime-panel')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'messages',
-        },
-        (payload) => {
-          const message = payload.new as Message;
-          const currentSelectedUser = selectedUserRef.current;
-
-          // Refresh messages if the conversation is currently open
-          if (currentSelectedUser && (
-            message.sender_id === currentSelectedUser.id ||
-            message.receiver_id === currentSelectedUser.id ||
-            message.sender_id === userProfile.id ||
-            message.receiver_id === userProfile.id
-          )) {
-            fetchMessages();
-          }
-
-          // Always update unread count when new messages arrive
-          onUnreadCountChange();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'message_reads',
-        },
-        () => {
-          const currentSelectedUser = selectedUserRef.current;
-          // Refresh messages if read status changed in current conversation
-          if (currentSelectedUser) {
-            fetchMessages();
-          }
-          // Always update unread count when read status changes
-          onUnreadCountChange();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'message_attachments',
-        },
-        () => {
-          const currentSelectedUser = selectedUserRef.current;
-          // Refresh messages if attachments are added
-          if (currentSelectedUser) {
-            fetchMessages();
-          }
-        }
-      )
-      .subscribe();
+    // Poll for new messages since realtime subscriptions are not available
+    const interval = setInterval(() => {
+      const currentSelectedUser = selectedUserRef.current;
+      if (currentSelectedUser) {
+        fetchMessages();
+      }
+      onUnreadCountChange();
+    }, 10000);
 
     return () => {
-      channel.unsubscribe();
+      clearInterval(interval);
     };
   };
 
@@ -187,7 +126,7 @@ export default function MessagingPanel({ isOpen, onClose, onUnreadCountChange, u
     if ((!messageContent.trim() && !fileInputRef.current?.files?.length) || !selectedUser || !userProfile) return;
 
     try {
-      // TODO: migrate this supabase call to api
+      const { data: message, error } = await api.messaging.send(selectedUser.id, messageContent.trim());
 
       if (error) throw error;
 

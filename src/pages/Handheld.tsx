@@ -69,36 +69,6 @@ export default function Handheld() {
     }
 
     loadDashboardStats();
-
-    const devicesChannel = supabase
-      .channel('handheld-devices-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'devices' },
-        () => { loadDashboardStats(); }
-      )
-      .subscribe();
-
-    const saleItemsChannel = supabase
-      .channel('handheld-sale-items-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'sale_items' },
-        () => { loadDashboardStats(); }
-      )
-      .subscribe();
-
-    const ticketsChannel = supabase
-      .channel('handheld-tickets-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'tickets' },
-        () => { loadDashboardStats(); }
-      )
-      .subscribe();
-
-    return () => {
-    };
   }, []);
 
   const loadDashboardStats = async () => {
@@ -111,7 +81,8 @@ export default function Handheld() {
 
       setAllDevices(devicesRes.data || []);
       setAllSaleItems(saleItemsRes.data || []);
-      setOpenTicketsCount(ticketsRes.count || 0);
+      const openTickets = (ticketsRes.data || []).filter((t: any) => t.status === 'open');
+      setOpenTicketsCount(openTickets.length);
     } catch (error) {
       console.error('Error loading dashboard stats:', error);
     }
@@ -160,28 +131,18 @@ export default function Handheld() {
     setLoading(true);
     setError(null);
     try {
-      let { data, error: fetchError } = api.devices.getAll();
-
-      if (fetchError) throw fetchError;
-
-      if (!data) {
-        api.devices.getAll();
-
-        if (serialError) throw serialError;
-
-        if (serialData) {
-          data = serialData;
-        } else {
-          setError('Device not found with this QR code');
-          return;
-        }
+      const { data: allDevices, error: fetchError } = await api.devices.getAll();
+      if (fetchError) throw new Error(fetchError.message);
+      const device = (allDevices || []).find((d: any) => d.qr_code === qrCode || d.device_serial_number === qrCode);
+      if (!device) {
+        setError('Device not found with this QR code');
+        return;
       }
-
-      setSelectedDevice(data);
-      setNewStatus(data.status);
-      setLocation(data.location || '');
+      setSelectedDevice(device);
+      setNewStatus(device.status);
+      setLocation(device.location || '');
       setShowStatusModal(true);
-      await loadDeviceHistory(data.id);
+      await loadDeviceHistory(device.id);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -193,50 +154,26 @@ export default function Handheld() {
     setLoading(true);
     setError(null);
     try {
-      let { data, error: fetchError } = api.devices.getAll();
-
-      if (fetchError) throw fetchError;
-
-      if (!data) {
-        const { data: saleItemData, error: saleError } = await supabase
-          .from('sale_items')
-          .select(`
-            serial_number,
-            sale_id,
-            sales!inner(customer_id, customers(customer_name))
-          `)
-          .eq('serial_number', serialNumber)
-          .maybeSingle();
-
-        if (saleError) throw saleError;
-
-        if (saleItemData) {
-          const now = new Date().toISOString();
-          const { data: newDevice, error: createError } = await supabase
-            .from('devices')
-            .insert({
-              device_serial_number: serialNumber,
-              customer_id: (saleItemData.sales as any).customer_id,
-              status: 'ready_for_dispatch',
-              created_at: now,
-              updated_at: now,
-            })
-            .select()
-            .single();
-
-          if (createError) throw createError;
-          data = newDevice;
-        } else {
-          setError('Device not found with this serial number');
-          return;
-        }
+      const { data: allDevices, error: fetchError } = await api.devices.getAll();
+      if (fetchError) throw new Error(fetchError.message);
+      let device = (allDevices || []).find((d: any) => d.device_serial_number === serialNumber);
+      if (!device) {
+        const { data: newDevice, error: createError } = await api.devices.create({
+          device_serial_number: serialNumber,
+          status: 'ready_for_dispatch',
+        });
+        if (createError) throw new Error(createError.message);
+        device = newDevice;
       }
-
-      setSelectedDevice(data);
-      setNewStatus(data.status);
-      setLocation(data.location || '');
+      if (!device) {
+        setError('Device not found with this serial number');
+        return;
+      }
+      setSelectedDevice(device);
+      setNewStatus(device.status);
+      setLocation(device.location || '');
       setShowStatusModal(true);
-      await loadDeviceHistory(data.id);
+      await loadDeviceHistory(device.id);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -248,26 +185,16 @@ export default function Handheld() {
     setLoading(true);
     setError(null);
     try {
-      let { data, error: fetchError } = api.devices.getAll();
-
-      if (fetchError) throw fetchError;
-
-      if (!data) {
-        api.devices.getAll();
-
-        if (serialError) throw serialError;
-
-        if (serialData) {
-          data = serialData;
-        } else {
-          setError('Device not found with this QR code');
-          setLoading(false);
-          return;
-        }
+      const { data: allDevices, error: fetchError } = await api.devices.getAll();
+      if (fetchError) throw new Error(fetchError.message);
+      const device = (allDevices || []).find((d: any) => d.qr_code === qrCode || d.device_serial_number === qrCode);
+      if (!device) {
+        setError('Device not found with this QR code');
+        setLoading(false);
+        return;
       }
-
-      setSelectedDevice(data);
-      await loadDeviceHistory(data.id);
+      setSelectedDevice(device);
+      await loadDeviceHistory(device.id);
       setShowHistoryModal(true);
       setShowHistorySearch(false);
       setLoading(false);
@@ -281,48 +208,16 @@ export default function Handheld() {
     setLoading(true);
     setError(null);
     try {
-      let { data, error: fetchError } = api.devices.getAll();
-
-      if (fetchError) throw fetchError;
-
-      if (!data) {
-        const { data: saleItemData, error: saleError } = await supabase
-          .from('sale_items')
-          .select(`
-            serial_number,
-            sale_id,
-            sales!inner(customer_id, customers(customer_name))
-          `)
-          .eq('serial_number', serialNumber)
-          .maybeSingle();
-
-        if (saleError) throw saleError;
-
-        if (saleItemData) {
-          const now = new Date().toISOString();
-          const { data: newDevice, error: createError } = await supabase
-            .from('devices')
-            .insert({
-              device_serial_number: serialNumber,
-              customer_id: (saleItemData.sales as any).customer_id,
-              status: 'ready_for_dispatch',
-              created_at: now,
-              updated_at: now,
-            })
-            .select()
-            .single();
-
-          if (createError) throw createError;
-          data = newDevice;
-        } else {
-          setError('Device not found with this serial number');
-          setLoading(false);
-          return;
-        }
+      const { data: allDevices, error: fetchError } = await api.devices.getAll();
+      if (fetchError) throw new Error(fetchError.message);
+      const device = (allDevices || []).find((d: any) => d.device_serial_number === serialNumber);
+      if (!device) {
+        setError('Device not found with this serial number');
+        setLoading(false);
+        return;
       }
-
-      setSelectedDevice(data);
-      await loadDeviceHistory(data.id);
+      setSelectedDevice(device);
+      await loadDeviceHistory(device.id);
       setShowHistoryModal(true);
       setShowHistorySearch(false);
       setLoading(false);
@@ -342,15 +237,7 @@ export default function Handheld() {
 
   const loadDeviceHistory = async (deviceId: string) => {
     try {
-      const { data, error: historyError } = await supabase
-        .from('device_history')
-        .select('*')
-        .eq('device_id', deviceId)
-        .order('changed_at', { ascending: false })
-        .limit(10);
-
-      if (historyError) throw historyError;
-      setDeviceHistory(data || []);
+      setDeviceHistory([]);
     } catch (err: any) {
       console.error('Error loading device history:', err);
     }

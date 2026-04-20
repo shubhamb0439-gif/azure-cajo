@@ -252,7 +252,7 @@ export default function Leads() {
 
   const loadLeads = async () => {
     setLoading(true);
-    api.leads.getAll();
+    const { data, error } = await api.leads.getAll();
 
     if (error) {
       console.error('Error loading leads:', error);
@@ -265,7 +265,7 @@ export default function Leads() {
       const userIds = [...new Set(data.map(l => l.assigned_to).filter(Boolean))];
 
       if (userIds.length > 0) {
-        api.users.getAll();
+        const { data: usersData } = await api.users.getAll();
 
         const userMap = new Map(usersData?.map(u => [u.auth_user_id, u.name]));
 
@@ -286,7 +286,7 @@ export default function Leads() {
   };
 
   const loadUsers = async () => {
-    api.users.getAll();
+    const { data } = await api.users.getAll();
 
     if (data) {
       setUsers(data);
@@ -304,40 +304,32 @@ export default function Leads() {
   };
 
   const logActivity = async (action: string, details: string) => {
-      // api call
-      action: action,
-      details: { message: details },
-      user_id: user?.id,
-    });
+    await api.activityLogs.create(action, { message: details });
   };
 
   const moveToProspects = async (lead: Lead) => {
-    const { data: prospectData, error: insertError } = await supabase
-      .from('prospects')
-      .insert({
-        prospect_name: lead.lead_name,
-        prospect_email: lead.lead_email,
-        prospect_phone: lead.lead_phone,
-        prospect_company: lead.lead_company,
-        prospect_position: lead.lead_position,
-        prospect_status: 'qualified',
-        prospect_source: lead.lead_source,
-        prospect_value: lead.lead_value,
-        prospect_notes: lead.lead_notes,
-        assigned_to: lead.assigned_to,
-        created_by: user?.id,
-        updated_by: user?.id,
-        original_lead_id: lead.id,
-      })
-      .select()
-      .single();
+    const { data: prospectData, error: insertError } = await api.prospects.create({
+      prospect_name: lead.lead_name,
+      prospect_email: lead.lead_email,
+      prospect_phone: lead.lead_phone,
+      prospect_company: lead.lead_company,
+      prospect_position: lead.lead_position,
+      prospect_status: 'qualified',
+      prospect_source: lead.lead_source,
+      prospect_value: lead.lead_value,
+      prospect_notes: lead.lead_notes,
+      assigned_to: lead.assigned_to,
+      created_by: user?.id,
+      updated_by: user?.id,
+      original_lead_id: lead.id,
+    });
 
     if (insertError) {
       alert('Error moving to prospects: ' + insertError.message);
       return false;
     }
 
-    api.leads.getAll();
+    const { error: deleteError } = await api.leads.delete(lead.id);
 
     if (deleteError) {
       alert('Error removing lead: ' + deleteError.message);
@@ -386,7 +378,7 @@ export default function Leads() {
       return;
     }
 
-    api.leads.getAll();
+    const { error } = await api.leads.delete(lead.id);
 
     if (error) {
       alert('Error deleting lead: ' + error.message);
@@ -427,7 +419,7 @@ export default function Leads() {
         return;
       }
 
-      api.leads.getAll();
+      const { error } = await api.leads.update(selectedLead.id, leadData);
 
       if (error) {
         alert('Error updating lead: ' + error.message);
@@ -437,7 +429,7 @@ export default function Leads() {
         loadLeads();
       }
     } else {
-      api.leads.getAll();
+      const { error } = await api.leads.create(leadData);
 
       if (error) {
         alert('Error creating lead: ' + error.message);

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { X, Warehouse, Truck, MapPin, Settings, Wifi, WifiOff, CheckCircle, XCircle } from 'lucide-react';
+import { api } from '../lib/api';
 
 interface Device {
   id: string;
@@ -66,10 +67,16 @@ export default function DeviceStatusUpdateModal({ device, onClose, onSuccess }: 
           break;
       }
 
-      // TODO: migrate this supabase call to api
+      const { error: updateError } = await api.devices.update(device.id, updateData);
+      if (updateError) throw updateError;
 
-      // TODO: migrate this supabase call to api
-
+      const { error: historyError } = await api.activityLogs.create('DEVICE_STATUS_UPDATE', {
+        device_id: device.id,
+        serial_number: device.device_serial_number,
+        old_status: device.status,
+        new_status: newStatus,
+        location: location || null,
+      });
       if (historyError) throw historyError;
 
       onSuccess();

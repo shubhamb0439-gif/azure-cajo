@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { X, Upload, Trash2, User as UserIcon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { api } from '../lib/api';
 
 interface EditProfilePanelProps {
   onClose: () => void;
@@ -26,7 +27,9 @@ export default function EditProfilePanel({ onClose }: EditProfilePanelProps) {
       // if (uploadError) throw uploadError;
 
       const publicUrl = ""; // configure azureStorage when blob storage is ready
-      const { error: updateError } = await supabase
+      const { error: updateError } = await api.users.updateProfile(userProfile.id, {
+        profile_pic: publicUrl,
+      });
 
       if (updateError) throw updateError;
 
@@ -48,7 +51,9 @@ export default function EditProfilePanel({ onClose }: EditProfilePanelProps) {
 
     setUploading(true);
     try {
-      const { error } = await supabase
+      const { error } = await api.users.updateProfile(userProfile.id, {
+        profile_pic: '',
+      });
 
       if (error) throw error;
 

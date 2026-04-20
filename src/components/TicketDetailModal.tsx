@@ -1,6 +1,7 @@
 import { X, CheckCircle, Calendar, User, AlertCircle, Send, MessageSquare } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { api } from '../lib/api';
 
 interface Ticket {
   id: string;
@@ -73,7 +74,7 @@ export default function TicketDetailModal({ ticket, onClose, onUpdate }: TicketD
   };
 
   const fetchMessages = async () => {
-    // TODO: migrate this supabase call to api
+    const { data, error } = await api.tickets.getMessages(ticket.id);
 
     if (error) {
       console.error('Error fetching messages:', error);
@@ -89,7 +90,6 @@ export default function TicketDetailModal({ ticket, onClose, onUpdate }: TicketD
       return;
     }
 
-    const now = new Date().toISOString();
     console.log('TicketDetailModal: Attempting to mark ticket as read', {
       ticketId: ticket.id,
       ticketNumber: ticket.ticket_number,
@@ -97,59 +97,34 @@ export default function TicketDetailModal({ ticket, onClose, onUpdate }: TicketD
       userRole: userProfile.role
     });
 
-    // TODO: migrate this supabase call to api
+    const unreadMessageIds = messages
+      .filter((msg) => msg.sender_id !== userProfile.id)
+      .map((msg) => msg.id);
 
-    if (selectError) {
-      console.error('TicketDetailModal: Error reading ticket status:', selectError);
+    if (unreadMessageIds.length === 0) {
+      console.log('TicketDetailModal: No unread messages to mark');
+      onUpdate();
       return;
     }
 
-    if (existingRead) {
-      console.log('TicketDetailModal: Updating existing read record', existingRead);
-      const { error: updateError } = await supabase
+    const { error: markError } = await api.tickets.markMessagesRead(ticket.id, unreadMessageIds);
 
-      if (updateError) {
-        console.error('TicketDetailModal: Error updating ticket read status:', updateError);
-      } else {
-        console.log('TicketDetailModal: Successfully updated read status');
-        onUpdate();
-      }
+    if (markError) {
+      console.error('TicketDetailModal: Error marking messages as read:', markError);
     } else {
-      console.log('TicketDetailModal: Creating new read record');
-      // TODO: migrate this supabase call to api
-
-      if (insertError) {
-        console.error('TicketDetailModal: Error creating ticket read status:', insertError);
-      } else {
-        console.log('TicketDetailModal: Successfully created read status');
-        onUpdate();
-      }
+      console.log('TicketDetailModal: Successfully marked messages as read');
+      onUpdate();
     }
   };
 
   const subscribeToMessages = () => {
-    const channel = supabase
-      .channel(`ticket-messages-${ticket.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'ticket_messages',
-          filter: `ticket_id=eq.${ticket.id}`,
-        },
-        (payload) => {
-          console.log('New message received:', payload);
-          fetchMessages();
-          markAsRead();
-        }
-      )
-      .subscribe((status) => {
-        console.log('Subscription status:', status);
-      });
+    const interval = setInterval(() => {
+      fetchMessages();
+      markAsRead();
+    }, 5000);
 
     return () => {
-      channel.unsubscribe();
+      clearInterval(interval);
     };
   };
 
@@ -159,11 +134,12 @@ export default function TicketDetailModal({ ticket, onClose, onUpdate }: TicketD
 
     setSendingMessage(true);
     try {
-      // TODO: migrate this supabase call to api
+      const { error } = await api.tickets.sendMessage(ticket.id, newMessage.trim());
 
       if (error) throw error;
 
       setNewMessage('');
+      await fetchMessages();
       await markAsRead();
     } catch (err) {
       console.error('Error sending message:', err);
@@ -180,12 +156,16 @@ export default function TicketDetailModal({ ticket, onClose, onUpdate }: TicketD
     setError(null);
 
     try {
-      const { error: ticketError } = await supabase
+      const { error: ticketError } = await api.tickets.update(ticket.id, {
+        status: 'closed',
+        resolution_notes: resolutionNotes || null,
+        closed_at: new Date().toISOString(),
+      });
 
       if (ticketError) throw ticketError;
 
       if (ticket.device_id && ticket.devices?.status === 'offline') {
-        const { error: deviceError } = await supabase
+        const { error: deviceError } = await api.devices.updateStatus(ticket.device_id, 'online', 'Device back online - ticket closed');
 
         if (deviceError) throw deviceError;
       }

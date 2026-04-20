@@ -24,6 +24,7 @@ import {
   FileWarning,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { api } from '../lib/api';
 import { useState, useEffect } from 'react';
 import AboutPresentation from './AboutPresentation';
 import ReportsPanel from './ReportsPanel';
@@ -103,7 +104,7 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
     const fetchUnreadTickets = async () => {
       console.log('Fetching tickets for badge, userProfile:', userProfile);
 
-      // TODO: migrate this supabase call to api
+      const { data: ticketsData, error } = await api.tickets.getAll();
 
       console.log('Tickets query result:', { ticketsData, error });
 
@@ -113,88 +114,13 @@ export default function Sidebar({ isOpen, onClose, collapsed, onToggleCollapse }
         return;
       }
 
-      console.log(`Found ${ticketsData.length} total tickets`);
-
-      let unreadCount = 0;
-      for (const ticket of ticketsData) {
-        // TODO: migrate this supabase call to api
-
-        console.log(`Ticket ${ticket.id} - lastRead:`, lastRead, 'error:', readError);
-
-        // Count as unread if never viewed
-        if (!lastRead) {
-          unreadCount++;
-          console.log(`Ticket ${ticket.id} marked as unread (never viewed)`);
-          continue;
-        }
-
-        // Check if there are new messages since last read
-        // TODO: migrate this supabase call to api
-
-        console.log(`Ticket ${ticket.id} - latestMessage:`, latestMessage, 'error:', msgError);
-
-        if (latestMessage && new Date(latestMessage.created_at) > new Date(lastRead.last_read_at)) {
-          unreadCount++;
-          console.log(`Ticket ${ticket.id} marked as unread (new messages)`);
-        }
-      }
-
-      console.log('Unread tickets count:', unreadCount);
-      setUnreadTicketsCount(unreadCount);
+      // Count open tickets as the unread badge count
+      const openTickets = ticketsData.filter((t: any) => t.status === 'open');
+      console.log(`Found ${ticketsData.length} total tickets, ${openTickets.length} open`);
+      setUnreadTicketsCount(openTickets.length);
     };
 
     fetchUnreadTickets();
-
-    const ticketsChannel = supabase
-      .channel('tickets-count')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'tickets',
-        },
-        () => {
-          fetchUnreadTickets();
-        }
-      )
-      .subscribe();
-
-    const messagesChannel = supabase
-      .channel('ticket-messages-count')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'ticket_messages',
-        },
-        () => {
-          fetchUnreadTickets();
-        }
-      )
-      .subscribe();
-
-    const readsChannel = supabase
-      .channel('ticket-reads-count')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'ticket_message_reads',
-        },
-        () => {
-          fetchUnreadTickets();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      
-      
-      
-    };
   }, [userProfile]);
 
   const toggleExpand = (itemName: string) => {

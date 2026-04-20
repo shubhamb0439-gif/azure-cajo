@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { api } from '../lib/api';
 import { Search, Plus, Filter, CheckCircle, Clock, AlertCircle, XCircle, Wifi, WifiOff } from 'lucide-react';
 import TicketDetailModal from '../components/TicketDetailModal';
 
@@ -46,68 +47,33 @@ export default function Support() {
   useEffect(() => {
     loadTickets();
     loadDeviceCounts();
-
-    const ticketsSubscription = supabase
-      .channel('tickets_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, () => {
-        loadTickets();
-      })
-      .subscribe();
-
-    const devicesSubscription = supabase
-      .channel('devices_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, () => {
-        loadDeviceCounts();
-      })
-      .subscribe();
-
-    const messagesSubscription = supabase
-      .channel('ticket_messages_support')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ticket_messages' }, () => {
-        loadTickets();
-      })
-      .subscribe();
-
-    const readsSubscription = supabase
-      .channel('ticket_reads_support')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ticket_message_reads' }, () => {
-        loadTickets();
-      })
-      .subscribe();
-
-    return () => {
-      ticketsSubscription.unsubscribe();
-      devicesSubscription.unsubscribe();
-      messagesSubscription.unsubscribe();
-      readsSubscription.unsubscribe();
-    };
   }, []);
 
   const loadTickets = async () => {
     try {
-      // TODO: migrate this supabase call to api
+      const { data: ticketsData, error } = await api.tickets.getAll();
 
       if (error) throw error;
 
       if (userProfile?.id) {
         const ticketsWithUnread = await Promise.all(
           (ticketsData || []).map(async (ticket) => {
-            // TODO: migrate this supabase call to api
+            const { data: messages } = await api.tickets.getMessages(ticket.id);
 
-            // TODO: migrate this supabase call to api
+            const sortedMessages = (messages || []).sort(
+              (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            );
+            const latestMessage = sortedMessages[0] || null;
 
-            // Check if ticket has never been viewed (no read record)
-            const is_new = !lastRead;
-
-            // Check if there are new messages since last read
-            const has_new_messages = latestMessage && lastRead && new Date(latestMessage.created_at) > new Date(lastRead.last_read_at);
+            // Determine unread status based on whether there are any messages
+            const has_unread = sortedMessages.length > 0 && latestMessage && !latestMessage.is_read;
 
             // Check if last message was from client/manager (for additional context)
-            const last_message_from_client = latestMessage?.users?.role === 'client' || latestMessage?.users?.role === 'manager';
+            const last_message_from_client = latestMessage?.sender_role === 'client' || latestMessage?.sender_role === 'manager';
 
             return {
               ...ticket,
-              has_unread: is_new || !!has_new_messages,
+              has_unread: !!has_unread,
               last_message_from_client: !!last_message_from_client,
             };
           })
@@ -125,11 +91,12 @@ export default function Support() {
 
   const loadDeviceCounts = async () => {
     try {
-      // TODO: migrate this supabase call to api
-      if (offlineError) throw offlineError;
+      const { data: devices, error } = await api.devices.getAll();
+      if (error) throw error;
 
-      setOnlineDevices(onlineCount || 0);
-      setOfflineDevices(offlineCount || 0);
+      const allDevices = devices || [];
+      setOnlineDevices(allDevices.filter((d: any) => d.status === 'online').length);
+      setOfflineDevices(allDevices.filter((d: any) => d.status === 'offline').length);
     } catch (error: any) {
       console.error('Error loading device counts:', error);
     }

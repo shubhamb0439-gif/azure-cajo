@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, User, Image as ImageIcon, Video, Loader2 } from 'lucide-react';
 import type { Database } from '../../lib/database.types';
+import { api } from '../../lib/api';
 
 type User = Database['public']['Tables']['users']['Row'];
 type Message = Database['public']['Tables']['messages']['Row'];
@@ -40,18 +41,14 @@ export default function MessagesAdmin() {
   const fetchMessages = async () => {
     setLoading(true);
     try {
-      // TODO: migrate this supabase call to api
+      const { data: messagesData } = await api.messaging.adminList();
 
       if (messagesData) {
-        const messageIds = messagesData.map((m) => m.id);
-
-        // TODO: migrate this supabase call to api
-
-        const messagesWithDetails = messagesData.map((msg) => ({
+        const messagesWithDetails = (messagesData as any[]).map((msg) => ({
           ...msg,
           sender: msg.sender as unknown as User,
           receiver: msg.receiver as unknown as User,
-          attachments: attachmentsData?.filter((a) => a.message_id === msg.id) || [],
+          attachments: msg.attachments || [],
         }));
 
         setMessages(messagesWithDetails);

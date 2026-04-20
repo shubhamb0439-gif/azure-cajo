@@ -1,5 +1,6 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { api } from '../lib/api';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import MessagingPanel from './MessagingPanel';
@@ -25,52 +26,38 @@ export default function Layout({ children }: LayoutProps) {
     if (!userProfile) return;
 
     updateUnreadCount();
-
-    const channel = supabase
-      .channel('messages-realtime-global')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'messages',
-        },
-        () => {
-          updateUnreadCount();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'message_reads',
-        },
-        () => {
-          updateUnreadCount();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      channel.unsubscribe();
-    };
   }, [userProfile]);
 
   const updateUnreadCount = async () => {
     if (!userProfile) return;
 
-    // TODO: migrate this supabase call to api
-    const unreadMessages = allMessages?.filter(m => !readIds.has(m.id)) || [];
-    const unreadCount = unreadMessages.length;
+    try {
+      const { data, error } = await api.messaging.getUnreadCount();
+      if (error) {
+        console.error('Error fetching unread count:', error);
+        return;
+      }
 
-    setUnreadMessageCount(unreadCount);
+      const unreadCount = data?.count || 0;
+      setUnreadMessageCount(unreadCount);
 
-    const countsByUser: Record<string, number> = {};
-    unreadMessages.forEach(msg => {
-      countsByUser[msg.sender_id] = (countsByUser[msg.sender_id] || 0) + 1;
-    });
-    setUnreadCountsByUser(countsByUser);
+      // Fetch conversations to build per-user unread counts
+      const { data: conversations, error: convError } = await api.messaging.getConversations();
+      if (convError || !conversations) {
+        setUnreadCountsByUser({});
+        return;
+      }
+
+      const countsByUser: Record<string, number> = {};
+      conversations.forEach((conv: any) => {
+        if (conv.unreadCount > 0 && conv.user?.id) {
+          countsByUser[conv.user.id] = conv.unreadCount;
+        }
+      });
+      setUnreadCountsByUser(countsByUser);
+    } catch (error: any) {
+      console.error('Error updating unread count:', error);
+    }
   };
 
   const [panelsExpanded, setPanelsExpanded] = useState(false);

@@ -291,7 +291,7 @@ export default function Customers() {
 
   const loadCustomers = async () => {
     setLoading(true);
-    api.customers.getAll();
+    const { data, error } = await api.customers.getAll();
 
     if (error) {
       console.error('Error loading customers:', error);
@@ -303,7 +303,7 @@ export default function Customers() {
       const userIds = [...new Set(data.map(c => c.assigned_to).filter(Boolean))];
 
       if (userIds.length > 0) {
-        api.users.getAll();
+        const { data: usersData } = await api.users.getAll();
 
         const userMap = new Map(usersData?.map(u => [u.auth_user_id, u.name]));
 
@@ -324,7 +324,7 @@ export default function Customers() {
   };
 
   const loadUsers = async () => {
-    api.users.getAll();
+    const { data } = await api.users.getAll();
 
     if (data) {
       setUsers(data);
@@ -342,11 +342,7 @@ export default function Customers() {
   };
 
   const logActivity = async (action: string, details: string) => {
-      // api call
-      action: action,
-      details: { message: details },
-      user_id: user?.id,
-    });
+    await api.activityLogs.create(action, { message: details });
   };
 
   const handleAdd = () => {
@@ -397,7 +393,7 @@ export default function Customers() {
       return;
     }
 
-    api.customers.getAll();
+    const { error } = await api.customers.delete(customer.id);
 
     if (error) {
       alert('Error deleting customer: ' + error.message);
@@ -429,7 +425,7 @@ export default function Customers() {
     };
 
     if (showEditPanel && selectedCustomer) {
-      api.customers.getAll();
+      const { error } = await api.customers.update(selectedCustomer.id, customerData);
 
       if (error) {
         alert('Error updating customer: ' + error.message);
@@ -439,7 +435,7 @@ export default function Customers() {
         loadCustomers();
       }
     } else {
-      api.customers.getAll();
+      const { error } = await api.customers.create(customerData);
 
       if (error) {
         alert('Error creating customer: ' + error.message);
@@ -487,51 +483,18 @@ export default function Customers() {
     setLoadingHistory(prev => ({ ...prev, [customerId]: true }));
 
     const [salesRes, deliveriesRes] = await Promise.all([
-      supabase
-        .from('sales')
-        .select(`
-          id,
-          sale_number,
-          sale_date,
-          sale_notes,
-          is_delivered,
-          sale_items (
-            id,
-            serial_number,
-            delivered
-          )
-        `)
-        .eq('customer_id', customerId)
-        .order('sale_date', { ascending: false }),
-
-      supabase
-        .from('deliveries')
-        .select(`
-          id,
-          delivery_address,
-          delivery_location,
-          delivery_date,
-          delivery_notes,
-          delivered,
-          delivered_at,
-          sale_id,
-          delivery_items (
-            id,
-            sale_item:sale_items (
-              serial_number
-            )
-          )
-        `)
-        .order('delivery_date', { ascending: false })
+      api.sales.getByCustomer(customerId),
+      api.deliveries.getAll(),
     ]);
 
     if (salesRes.data) {
-      setSalesHistory(prev => ({ ...prev, [customerId]: salesRes.data as SaleHistory[] }));
+      setSalesHistory(prev => ({ ...prev, [customerId]: salesRes.data as unknown as SaleHistory[] }));
     }
 
-    if (deliveriesRes.data) {
-      const customerDeliveries = deliveriesRes.data.filter(delivery => {
-        return salesRes.data?.some(sale => sale.id === delivery.sale_id);
+    if (deliveriesRes.data && salesRes.data) {
+      const saleIds = salesRes.data.map(s => s.id);
+      const customerDeliveries = (deliveriesRes.data as any[]).filter(delivery => {
+        return saleIds.includes(delivery.sale_id);
       });
       setDeliveryHistory(prev => ({ ...prev, [customerId]: customerDeliveries as DeliveryHistory[] }));
     }
