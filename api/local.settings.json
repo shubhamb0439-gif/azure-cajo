@@ -1,0 +1,11 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AZURE_SQL_CONNECTION_STRING": "Server=tcp:cajo-erp-server.database.windows.net,1433;Initial Catalog=free-sql-db-0264476;Persist Security Info=False;User ID=cajoadmin;Password=YOUR_PASSWORD_HERE;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;",
+    "JWT_SECRET": "cajo-erp-super-secret-jwt-key-2026-change-in-production",
+    "JWT_EXPIRES_IN": "24h",
+    "FRONTEND_URL": "http://localhost:5173"
+  }
+}
