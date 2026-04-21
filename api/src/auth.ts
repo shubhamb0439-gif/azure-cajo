@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { query, queryOne, execute } from './db';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'cajo-erp-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || 'cajo-erp-super-secret-jwt-key-2026-change-in-production';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
 
 export interface TokenPayload {
