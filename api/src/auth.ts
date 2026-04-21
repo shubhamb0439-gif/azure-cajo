@@ -26,7 +26,12 @@ export function verifyToken(token: string): TokenPayload | null {
 }
 
 export function getTokenFromRequest(req: any): TokenPayload | null {
-  const auth = req.headers?.authorization || req.headers?.Authorization || '';
+  let auth = '';
+  if (typeof req.headers?.get === 'function') {
+    auth = req.headers.get('authorization') || '';
+  } else {
+    auth = req.headers?.authorization || req.headers?.Authorization || '';
+  }
   const token = auth.replace('Bearer ', '').trim();
   if (!token) return null;
   return verifyToken(token);
