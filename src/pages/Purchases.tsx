@@ -11,22 +11,21 @@ import { api } from '../lib/api';
 
 interface PurchaseItem {
   id: string;
-  item_id: string;
+  inventory_item_id: string;
   vendor_item_code: string | null;
-  quantity: number;
+  quantity_ordered: number;
   quantity_received: number;
   unit_cost: number;
-  lead_time: number;
-  received: boolean;
-  inventory_items: { id: string; item_id: string; item_name: string; item_stock_current: number };
+  lead_time_days: number;
+  inventory_items: { id: string; sku: string; name: string; quantity_in_stock: number };
 }
 
 interface Purchase {
   id: string;
-  purchase_vendor_id: string | null;
-  purchase_date: string;
-  purchase_po_number: string | null;
-  vendors: { vendor_name: string } | null;
+  vendor_id: string | null;
+  created_at: string;
+  po_reference: string | null;
+  vendors: { name: string } | null;
   purchase_items: PurchaseItem[];
 }
 
@@ -63,21 +62,21 @@ export default function Purchases() {
     let result = purchases;
     if (search) {
       result = result.filter(p =>
-        p.vendors?.vendor_name.toLowerCase().includes(search.toLowerCase()) ||
-        p.purchase_po_number?.toLowerCase().includes(search.toLowerCase()) ||
+        p.vendors?.name.toLowerCase().includes(search.toLowerCase()) ||
+        p.po_reference?.toLowerCase().includes(search.toLowerCase()) ||
         p.purchase_items.some(item =>
-          item.inventory_items.item_name.toLowerCase().includes(search.toLowerCase()) ||
-          item.inventory_items.item_id.toLowerCase().includes(search.toLowerCase())
+          item.inventory_items.name.toLowerCase().includes(search.toLowerCase()) ||
+          item.inventory_items.sku.toLowerCase().includes(search.toLowerCase())
         )
       );
     }
     if (vendorFilter) {
-      result = result.filter(p => p.purchase_vendor_id === vendorFilter);
+      result = result.filter(p => p.vendor_id === vendorFilter);
     }
     if (statusFilter === 'purchases') {
-      result = result.filter(p => p.purchase_items.some(item => item.quantity_received < item.quantity));
+      result = result.filter(p => p.purchase_items.some(item => item.quantity_received < item.quantity_ordered));
     } else if (statusFilter === 'receipts') {
-      result = result.filter(p => p.purchase_items.every(item => item.quantity_received >= item.quantity));
+      result = result.filter(p => p.purchase_items.every(item => item.quantity_received >= item.quantity_ordered));
     }
     setFiltered(result);
   }, [purchases, search, vendorFilter, statusFilter]);
@@ -116,23 +115,23 @@ export default function Purchases() {
       }
     }
 
-    if (!confirm(`Delete purchase ${purchase.purchase_po_number || 'without PO number'}?`)) {
+    if (!confirm(`Delete purchase ${purchase.po_reference || 'without PO number'}?`)) {
       return;
     }
 
     try {
       for (const item of receivedItems) {
-        const newStock = item.inventory_items.item_stock_current - item.quantity_received;
+        const newStock = item.inventory_items.quantity_in_stock - item.quantity_received;
 
         await api.inventory.update(item.inventory_items.id, {
-          item_stock_current: newStock,
+          quantity_in_stock: newStock,
         });
       }
 
       await api.purchases.delete(purchase.id);
 
       await api.activityLogs.create('DELETE_PURCHASE', {
-        poNumber: purchase.purchase_po_number,
+        poNumber: purchase.po_reference,
         itemCount: purchase.purchase_items.length,
       });
 
@@ -144,7 +143,7 @@ export default function Purchases() {
   };
 
   const calculateTotals = (items: PurchaseItem[]) => {
-    return items.reduce((sum, item) => sum + (item.quantity * item.unit_cost), 0);
+    return items.reduce((sum, item) => sum + (item.quantity_ordered * item.unit_cost), 0);
   };
 
   if (loading) {
@@ -203,7 +202,7 @@ export default function Purchases() {
               <option value="">All Vendors</option>
               {vendors.map((vendor) => (
                 <option key={vendor.id} value={vendor.id}>
-                  {vendor.vendor_name}
+                  {(vendor as any).name}
                 </option>
               ))}
             </select>
@@ -243,13 +242,13 @@ export default function Purchases() {
                       </button>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700 dark:text-slate-300">
-                      {formatDate(p.purchase_date)}
+                      {formatDate(p.created_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700 dark:text-slate-300">
-                      {p.purchase_po_number || '-'}
+                      {p.po_reference || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700 dark:text-slate-300">
-                      {p.vendors?.vendor_name || 'Unknown'}
+                      {p.vendors?.name || 'Unknown'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700 dark:text-slate-300">
                       {p.purchase_items.length}
@@ -258,7 +257,7 @@ export default function Purchases() {
                       {getCurrencySymbol()}{formatAmount(calculateTotals(p.purchase_items))}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {p.purchase_items.every(item => item.quantity_received >= item.quantity) ? (
+                      {p.purchase_items.every(item => item.quantity_received >= item.quantity_ordered) ? (
                         <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 rounded">
                           Received
                         </span>
@@ -316,26 +315,26 @@ export default function Purchases() {
                               {p.purchase_items.map(item => (
                                 <tr key={item.id} className="text-sm">
                                   <td className="py-2 text-slate-900 dark:text-white">
-                                    <div className="font-medium">{item.inventory_items.item_name}</div>
-                                    <div className="text-xs text-slate-500">{item.inventory_items.item_id}</div>
+                                    <div className="font-medium">{item.inventory_items.name}</div>
+                                    <div className="text-xs text-slate-500">{item.inventory_items.sku}</div>
                                   </td>
                                   <td className="py-2 text-slate-700 dark:text-slate-300">{item.vendor_item_code || '-'}</td>
-                                  <td className="py-2 text-right text-slate-700 dark:text-slate-300">{item.quantity}</td>
+                                  <td className="py-2 text-right text-slate-700 dark:text-slate-300">{item.quantity_ordered}</td>
                                   <td className="py-2 text-right text-slate-700 dark:text-slate-300">{item.quantity_received}</td>
-                                  <td className="py-2 text-right text-slate-700 dark:text-slate-300">{(item.quantity - item.quantity_received).toFixed(2)}</td>
+                                  <td className="py-2 text-right text-slate-700 dark:text-slate-300">{(item.quantity_ordered - item.quantity_received).toFixed(2)}</td>
                                   <td className="py-2 text-right text-slate-700 dark:text-slate-300">{getCurrencySymbol()}{formatAmount(item.unit_cost)}</td>
                                   <td className="py-2 text-right font-medium text-slate-900 dark:text-white">
-                                    {getCurrencySymbol()}{formatAmount(item.quantity * item.unit_cost)}
+                                    {getCurrencySymbol()}{formatAmount(item.quantity_ordered * item.unit_cost)}
                                   </td>
-                                  <td className="py-2 text-right text-slate-700 dark:text-slate-300">{item.lead_time} days</td>
+                                  <td className="py-2 text-right text-slate-700 dark:text-slate-300">{item.lead_time_days} days</td>
                                   <td className="py-2 text-center">
-                                    {item.quantity_received >= item.quantity ? (
+                                    {item.quantity_received >= item.quantity_ordered ? (
                                       <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 rounded">
                                         Complete
                                       </span>
                                     ) : item.quantity_received > 0 ? (
                                       <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400 rounded">
-                                        {((item.quantity_received / item.quantity) * 100).toFixed(0)}%
+                                        {((item.quantity_received / item.quantity_ordered) * 100).toFixed(0)}%
                                       </span>
                                     ) : (
                                       <span className="px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-800 dark:bg-slate-900/20 dark:text-slate-400 rounded">

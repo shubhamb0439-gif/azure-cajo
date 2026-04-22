@@ -16,15 +16,14 @@ interface VendorPurchase {
   purchase_po_number: string | null;
   purchase_items: Array<{
     id: string;
-    item_id: string;
+    inventory_item_id: string;
     vendor_item_code: string | null;
-    quantity: number;
+    quantity_ordered: number;
     quantity_received: number | null;
     remaining_quantity: number;
     unit_cost: number;
-    lead_time: number | null;
-    received: boolean;
-    inventory_items: { item_id: string; item_name: string };
+    lead_time_days: number | null;
+    inventory_items: { sku: string; name: string };
   }>;
 }
 
@@ -33,9 +32,7 @@ export default function Vendors() {
   const { formatAmount, getCurrencySymbol, isViewOnly } = useCurrency();
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [filtered, setFiltered] = useState<Vendor[]>([]);
-  const [groups, setGroups] = useState<string[]>([]);
   const [search, setSearch] = useState('');
-  const [filterGroup, setFilterGroup] = useState('');
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Vendor | null>(null);
@@ -50,24 +47,18 @@ export default function Vendors() {
     let result = vendors;
     if (search) {
       result = result.filter(v =>
-        v.vendor_name.toLowerCase().includes(search.toLowerCase()) ||
-        v.vendor_id.toLowerCase().includes(search.toLowerCase()) ||
-        (v.vendor_contact_name && v.vendor_contact_name.toLowerCase().includes(search.toLowerCase())) ||
-        (v.vendor_email && v.vendor_email.toLowerCase().includes(search.toLowerCase()))
+        v.name.toLowerCase().includes(search.toLowerCase()) ||
+        (v.contact_name && v.contact_name.toLowerCase().includes(search.toLowerCase())) ||
+        (v.email && v.email.toLowerCase().includes(search.toLowerCase()))
       );
     }
-    if (filterGroup) {
-      result = result.filter(v => v.vendor_group === filterGroup);
-    }
     setFiltered(result);
-  }, [vendors, search, filterGroup]);
+  }, [vendors, search]);
 
   const loadData = async () => {
     setLoading(true);
     const vendorsRes = await api.vendors.getAll();
-    const groupsRes = await api.dropdowns.getValues('vendor_group');
     if (vendorsRes.data) setVendors(vendorsRes.data);
-    if (groupsRes.data) setGroups(groupsRes.data.map(g => g.drop_value));
     setLoading(false);
   };
 
@@ -115,25 +106,15 @@ export default function Vendors() {
       </div>
 
       <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search vendors..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-            />
-          </div>
-          <select
-            value={filterGroup}
-            onChange={(e) => setFilterGroup(e.target.value)}
-            className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-          >
-            <option value="">All Groups</option>
-            {groups.map(g => <option key={g} value={g}>{g}</option>)}
-          </select>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search vendors..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
+          />
         </div>
       </div>
 
@@ -143,11 +124,9 @@ export default function Vendors() {
             <thead className="bg-slate-50 dark:bg-slate-900">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase w-8"></th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">ID</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Group</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Contact</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Ratings</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Rating</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Actions</th>
               </tr>
             </thead>
@@ -167,19 +146,15 @@ export default function Vendors() {
                         )}
                       </button>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 dark:text-white">{v.vendor_id}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700 dark:text-slate-300">{v.vendor_name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700 dark:text-slate-300">{v.vendor_group || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 dark:text-white">{v.name}</td>
                     <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-300">
-                      {v.vendor_contact_name && <div className="font-medium">{v.vendor_contact_name}</div>}
-                      <div>{v.vendor_email || '-'}</div>
-                      <div className="text-xs text-slate-500">{v.vendor_phone || ''}</div>
+                      {v.contact_name && <div className="font-medium">{v.contact_name}</div>}
+                      <div>{v.email || '-'}</div>
+                      <div className="text-xs text-slate-500">{v.phone || ''}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <div className="flex items-center space-x-2">
-                        <Rating label="P" value={v.vendor_rating_price} />
-                        <Rating label="Q" value={v.vendor_rating_quality} />
-                        <Rating label="L" value={v.vendor_rating_lead} />
+                        <Rating label="R" value={v.rating} />
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm space-x-2">
@@ -188,7 +163,7 @@ export default function Vendors() {
                           <button onClick={() => { setEditing(v); setShowForm(true); }} className="inline-flex items-center p-1.5 text-green-600 hover:text-green-700">
                             <Pencil className="w-4 h-4" />
                           </button>
-                          <button onClick={() => handleDelete(v.id, v.vendor_name)} className="inline-flex items-center p-1.5 text-red-600 hover:text-red-700">
+                          <button onClick={() => handleDelete(v.id, v.name)} className="inline-flex items-center p-1.5 text-red-600 hover:text-red-700">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </>
@@ -197,7 +172,7 @@ export default function Vendors() {
                   </tr>
                   {expandedRows.has(v.id) && (
                     <tr key={`${v.id}-expanded`} className="bg-slate-50 dark:bg-slate-900">
-                      <td colSpan={7} className="px-6 py-4">
+                      <td colSpan={5} className="px-6 py-4">
                         <div className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Purchase History</div>
                         {vendorPurchases[v.id] && vendorPurchases[v.id].length > 0 ? (
                           <div className="space-y-4">
@@ -238,18 +213,18 @@ export default function Vendors() {
                                     <tbody>
                                       {purchase.purchase_items.map((item) => {
                                         const quantityDelivered = item.quantity_received || 0;
-                                        const quantityUndelivered = item.quantity - quantityDelivered;
+                                        const quantityUndelivered = item.quantity_ordered - quantityDelivered;
                                         return (
                                           <tr key={item.id} className="border-b border-slate-100 dark:border-slate-800">
                                             <td className="py-2 text-slate-700 dark:text-slate-300">
-                                              <div className="font-medium">{item.inventory_items.item_name}</div>
-                                              <div className="text-xs text-slate-500">{item.inventory_items.item_id}</div>
+                                              <div className="font-medium">{item.inventory_items.name}</div>
+                                              <div className="text-xs text-slate-500">{item.inventory_items.sku}</div>
                                             </td>
                                             <td className="py-2 text-slate-700 dark:text-slate-300">
                                               {item.vendor_item_code || '-'}
                                             </td>
                                             <td className="py-2 text-right text-slate-700 dark:text-slate-300">
-                                              {item.quantity}
+                                              {item.quantity_ordered}
                                             </td>
                                             <td className="py-2 text-right text-slate-700 dark:text-slate-300">
                                               <span className={quantityDelivered > 0 ? 'text-green-600 dark:text-green-400 font-medium' : ''}>
@@ -265,10 +240,10 @@ export default function Vendors() {
                                               {getCurrencySymbol()}{formatAmount(item.unit_cost)}
                                             </td>
                                             <td className="py-2 text-right text-slate-700 dark:text-slate-300">
-                                              {getCurrencySymbol()}{formatAmount(item.quantity * item.unit_cost)}
+                                              {getCurrencySymbol()}{formatAmount(item.quantity_ordered * item.unit_cost)}
                                             </td>
                                             <td className="py-2 text-slate-700 dark:text-slate-300">
-                                              {item.lead_time && item.lead_time > 0 ? `${item.lead_time} days` : '-'}
+                                              {item.lead_time_days && item.lead_time_days > 0 ? `${item.lead_time_days} days` : '-'}
                                             </td>
                                           </tr>
                                         );
@@ -295,7 +270,7 @@ export default function Vendors() {
         </div>
       </div>
 
-      <VendorForm isOpen={showForm} vendor={editing} groups={groups} onClose={() => { setShowForm(false); setEditing(null); }} onSuccess={() => { setShowForm(false); setEditing(null); loadData(); }} />
+      <VendorForm isOpen={showForm} vendor={editing} onClose={() => { setShowForm(false); setEditing(null); }} onSuccess={() => { setShowForm(false); setEditing(null); loadData(); }} />
     </div>
   );
 }
@@ -310,74 +285,45 @@ function Rating({ label, value }: { label: string; value: number }) {
   );
 }
 
-function VendorForm({ isOpen, vendor, groups, onClose, onSuccess }: { isOpen: boolean; vendor: Vendor | null; groups: string[]; onClose: () => void; onSuccess: () => void }) {
+function VendorForm({ isOpen, vendor, onClose, onSuccess }: { isOpen: boolean; vendor: Vendor | null; onClose: () => void; onSuccess: () => void }) {
   const { userProfile } = useAuth();
-  const [currencies, setCurrencies] = useState<string[]>([]);
   const [form, setForm] = useState({
-    vendor_id: vendor?.vendor_id || '',
-    vendor_name: vendor?.vendor_name || '',
-    vendor_name_legal: vendor?.vendor_name_legal || '',
-    vendor_group: vendor?.vendor_group || '',
-    vendor_contact_name: vendor?.vendor_contact_name || '',
-    vendor_email: vendor?.vendor_email || '',
-    vendor_phone: vendor?.vendor_phone || '',
-    vendor_address: vendor?.vendor_address || '',
-    vendor_currency: vendor?.vendor_currency || 'USD',
-    vendor_rating_price: vendor?.vendor_rating_price || 0,
-    vendor_rating_quality: vendor?.vendor_rating_quality || 0,
-    vendor_rating_lead: vendor?.vendor_rating_lead || 0,
+    name: vendor?.name || '',
+    contact_name: vendor?.contact_name || '',
+    email: vendor?.email || '',
+    phone: vendor?.phone || '',
+    address: vendor?.address || '',
+    rating: vendor?.rating || 0,
   });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    loadCurrencies();
-  }, []);
-
-  useEffect(() => {
     if (vendor) {
       setForm({
-        vendor_id: vendor.vendor_id || '',
-        vendor_name: vendor.vendor_name || '',
-        vendor_name_legal: vendor.vendor_name_legal || '',
-        vendor_group: vendor.vendor_group || '',
-        vendor_contact_name: vendor.vendor_contact_name || '',
-        vendor_email: vendor.vendor_email || '',
-        vendor_phone: vendor.vendor_phone || '',
-        vendor_address: vendor.vendor_address || '',
-        vendor_currency: vendor.vendor_currency || 'USD',
-        vendor_rating_price: vendor.vendor_rating_price || 0,
-        vendor_rating_quality: vendor.vendor_rating_quality || 0,
-        vendor_rating_lead: vendor.vendor_rating_lead || 0,
+        name: vendor.name || '',
+        contact_name: vendor.contact_name || '',
+        email: vendor.email || '',
+        phone: vendor.phone || '',
+        address: vendor.address || '',
+        rating: vendor.rating || 0,
       });
     } else {
       setForm({
-        vendor_id: '',
-        vendor_name: '',
-        vendor_name_legal: '',
-        vendor_group: '',
-        vendor_contact_name: '',
-        vendor_email: '',
-        vendor_phone: '',
-        vendor_address: '',
-        vendor_currency: 'USD',
-        vendor_rating_price: 0,
-        vendor_rating_quality: 0,
-        vendor_rating_lead: 0,
+        name: '',
+        contact_name: '',
+        email: '',
+        phone: '',
+        address: '',
+        rating: 0,
       });
     }
   }, [vendor]);
-
-  const loadCurrencies = async () => {
-    const res = await api.dropdowns.getValues('vendor_currency');
-    if (res.data) setCurrencies(res.data.map(c => c.drop_value));
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const avgRating = (form.vendor_rating_price + form.vendor_rating_quality + form.vendor_rating_lead) / 3;
-      const dataToSave = { ...form, vendor_rating_average: avgRating };
+      const dataToSave = { ...form, rating_average: form.rating };
 
       if (vendor) {
         await api.vendors.update(vendor.id, { ...dataToSave, updated_by: userProfile?.id });
@@ -399,96 +345,38 @@ function VendorForm({ isOpen, vendor, groups, onClose, onSuccess }: { isOpen: bo
     <SidePanel isOpen={isOpen} onClose={onClose} title={`${vendor ? 'Edit' : 'Add'} Vendor`}>
       <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Vendor ID *</label>
-            <input type="text" value={form.vendor_id} onChange={(e) => setForm({ ...form, vendor_id: e.target.value })} required disabled={!!vendor} className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white disabled:opacity-50" />
-          </div>
-          <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Vendor Name *</label>
-            <input type="text" value={form.vendor_name} onChange={(e) => setForm({ ...form, vendor_name: e.target.value })} required className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Legal Name</label>
-            <input type="text" value={form.vendor_name_legal} onChange={(e) => setForm({ ...form, vendor_name_legal: e.target.value })} className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Group</label>
-            <select value={form.vendor_group} onChange={(e) => setForm({ ...form, vendor_group: e.target.value })} className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white">
-              <option value="">Select Group</option>
-              {groups.map(g => <option key={g} value={g}>{g}</option>)}
-            </select>
+            <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white" />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Contact Name</label>
-            <input type="text" value={form.vendor_contact_name} onChange={(e) => setForm({ ...form, vendor_contact_name: e.target.value })} className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white" />
+            <input type="text" value={form.contact_name} onChange={(e) => setForm({ ...form, contact_name: e.target.value })} className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white" />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Email</label>
-            <input type="email" value={form.vendor_email} onChange={(e) => setForm({ ...form, vendor_email: e.target.value })} className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white" />
+            <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white" />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Phone</label>
-            <input type="tel" value={form.vendor_phone} onChange={(e) => setForm({ ...form, vendor_phone: e.target.value })} className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white" />
+            <input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white" />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Address</label>
-            <textarea value={form.vendor_address} onChange={(e) => setForm({ ...form, vendor_address: e.target.value })} rows={2} className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Currency</label>
-            <select value={form.vendor_currency} onChange={(e) => setForm({ ...form, vendor_currency: e.target.value })} className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white">
-              <option value="">Select Currency</option>
-              {currencies.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <textarea value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} rows={2} className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white" />
           </div>
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Ratings</h3>
+            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Rating</h3>
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Price: <span className="text-green-600 dark:text-green-400 font-semibold">{form.vendor_rating_price}</span>
+                Rating: <span className="text-green-600 dark:text-green-400 font-semibold">{form.rating}</span>
               </label>
               <input
                 type="range"
                 min="0"
                 max="5"
                 step="0.5"
-                value={form.vendor_rating_price}
-                onChange={(e) => setForm({ ...form, vendor_rating_price: parseFloat(e.target.value) })}
-                className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-green-600"
-              />
-              <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1">
-                <span>0</span>
-                <span>5</span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Quality: <span className="text-green-600 dark:text-green-400 font-semibold">{form.vendor_rating_quality}</span>
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="5"
-                step="0.5"
-                value={form.vendor_rating_quality}
-                onChange={(e) => setForm({ ...form, vendor_rating_quality: parseFloat(e.target.value) })}
-                className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-green-600"
-              />
-              <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1">
-                <span>0</span>
-                <span>5</span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Lead Time: <span className="text-green-600 dark:text-green-400 font-semibold">{form.vendor_rating_lead}</span>
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="5"
-                step="0.5"
-                value={form.vendor_rating_lead}
-                onChange={(e) => setForm({ ...form, vendor_rating_lead: parseFloat(e.target.value) })}
+                value={form.rating}
+                onChange={(e) => setForm({ ...form, rating: parseFloat(e.target.value) })}
                 className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-green-600"
               />
               <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1">

@@ -235,8 +235,9 @@ export const api = {
 
   dropdowns: {
     getTypes: () => azureApi.get<DropdownType[]>('/dropdowns/types'),
-    getValues: (typeId: string) => azureApi.get<DropdownValue[]>(`/dropdowns/values/${typeId}`),
-    addValue: (data: Partial<DropdownValue>) => azureApi.post<DropdownValue>('/dropdowns/values', data),
+    getValues: (typeName: string) => azureApi.get<DropdownValue[]>(`/dropdowns/values/${typeName}`),
+    addValue: (data: { dropdown_type_id?: string; type_name?: string; value: string }) =>
+      azureApi.post<DropdownValue>('/dropdowns/values', data),
     deleteValue: (id: string) => azureApi.delete<null>(`/dropdowns/values/${id}`),
   },
 

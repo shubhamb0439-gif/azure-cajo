@@ -1,21 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useCurrency } from '../contexts/CurrencyContext';
 import SidePanel from '../components/SidePanel';
 import { Pencil, Trash2, Plus, Search, Filter } from 'lucide-react';
 import { api } from '../lib/api';
 
 interface Lead {
   id: string;
-  lead_name: string;
-  lead_email: string | null;
-  lead_phone: string | null;
-  lead_company: string | null;
-  lead_position: string | null;
-  lead_status: string;
-  lead_source: string | null;
-  lead_value: number | null;
-  lead_notes: string | null;
+  company_name: string;
+  email: string | null;
+  phone: string | null;
+  status: string;
+  source: string | null;
+  notes: string | null;
   assigned_to: string | null;
   created_at: string;
   updated_at: string;
@@ -25,15 +21,12 @@ interface Lead {
 }
 
 interface LeadFormData {
-  lead_name: string;
-  lead_email: string;
-  lead_phone: string;
-  lead_company: string;
-  lead_position: string;
-  lead_status: string;
-  lead_source: string;
-  lead_value: string;
-  lead_notes: string;
+  company_name: string;
+  email: string;
+  phone: string;
+  status: string;
+  source: string;
+  notes: string;
   assigned_to: string;
 }
 
@@ -49,19 +42,18 @@ interface LeadFormProps {
 }
 
 function LeadForm({ formData, setFormData, onSubmit, onCancel, isEdit, leadStatuses, leadSources, users }: LeadFormProps) {
-  const { getCurrencySymbol } = useCurrency();
   const capitalize = (str: string) => str.charAt(0).toUpperCase() + str.slice(1);
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div>
         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          Lead Name *
+          Company Name *
         </label>
         <input
           type="text"
-          value={formData.lead_name}
-          onChange={(e) => setFormData({ ...formData, lead_name: e.target.value })}
+          value={formData.company_name}
+          onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
           className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
           required
         />
@@ -73,8 +65,8 @@ function LeadForm({ formData, setFormData, onSubmit, onCancel, isEdit, leadStatu
         </label>
         <input
           type="email"
-          value={formData.lead_email}
-          onChange={(e) => setFormData({ ...formData, lead_email: e.target.value })}
+          value={formData.email}
+          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
           className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
         />
       </div>
@@ -85,32 +77,8 @@ function LeadForm({ formData, setFormData, onSubmit, onCancel, isEdit, leadStatu
         </label>
         <input
           type="tel"
-          value={formData.lead_phone}
-          onChange={(e) => setFormData({ ...formData, lead_phone: e.target.value })}
-          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          Company
-        </label>
-        <input
-          type="text"
-          value={formData.lead_company}
-          onChange={(e) => setFormData({ ...formData, lead_company: e.target.value })}
-          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          Position
-        </label>
-        <input
-          type="text"
-          value={formData.lead_position}
-          onChange={(e) => setFormData({ ...formData, lead_position: e.target.value })}
+          value={formData.phone}
+          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
           className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
         />
       </div>
@@ -120,8 +88,8 @@ function LeadForm({ formData, setFormData, onSubmit, onCancel, isEdit, leadStatu
           Status *
         </label>
         <select
-          value={formData.lead_status}
-          onChange={(e) => setFormData({ ...formData, lead_status: e.target.value })}
+          value={formData.status}
+          onChange={(e) => setFormData({ ...formData, status: e.target.value })}
           className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
           required
         >
@@ -138,8 +106,8 @@ function LeadForm({ formData, setFormData, onSubmit, onCancel, isEdit, leadStatu
           Source
         </label>
         <select
-          value={formData.lead_source}
-          onChange={(e) => setFormData({ ...formData, lead_source: e.target.value })}
+          value={formData.source}
+          onChange={(e) => setFormData({ ...formData, source: e.target.value })}
           className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
         >
           <option value="">Select source...</option>
@@ -149,21 +117,6 @@ function LeadForm({ formData, setFormData, onSubmit, onCancel, isEdit, leadStatu
             </option>
           ))}
         </select>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          Estimated Value ({getCurrencySymbol()})
-        </label>
-        <input
-          type="number"
-          step="0.01"
-          value={formData.lead_value}
-          onChange={(e) => setFormData({ ...formData, lead_value: e.target.value })}
-          onFocus={(e) => e.target.value === '0' && (e.target.value = '')}
-          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-          placeholder="0.00"
-        />
       </div>
 
       <div>
@@ -189,8 +142,8 @@ function LeadForm({ formData, setFormData, onSubmit, onCancel, isEdit, leadStatu
           Notes
         </label>
         <textarea
-          value={formData.lead_notes}
-          onChange={(e) => setFormData({ ...formData, lead_notes: e.target.value })}
+          value={formData.notes}
+          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
           rows={4}
           className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
         />
@@ -217,7 +170,7 @@ function LeadForm({ formData, setFormData, onSubmit, onCancel, isEdit, leadStatu
 
 export default function Leads() {
   const { user, hasWriteAccess } = useAuth();
-  const { getCurrencySymbol, isViewOnly } = useCurrency();
+  const { isViewOnly } = useCurrency();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [leadStatuses, setLeadStatuses] = useState<string[]>([]);
@@ -230,15 +183,12 @@ export default function Leads() {
   const [showEditPanel, setShowEditPanel] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [formData, setFormData] = useState<LeadFormData>({
-    lead_name: '',
-    lead_email: '',
-    lead_phone: '',
-    lead_company: '',
-    lead_position: '',
-    lead_status: '',
-    lead_source: '',
-    lead_value: '',
-    lead_notes: '',
+    company_name: '',
+    email: '',
+    phone: '',
+    status: '',
+    source: '',
+    notes: '',
     assigned_to: '',
   });
 
@@ -295,12 +245,12 @@ export default function Leads() {
 
   const loadDropdowns = async () => {
     const [statusRes, sourceRes] = await Promise.all([
-      api.dropdowns.getValues(''),
-      api.dropdowns.getValues(''),
+      api.dropdowns.getValues('lead_status'),
+      api.dropdowns.getValues('lead_source'),
     ]);
 
-    if (statusRes.data) setLeadStatuses(statusRes.data.map(d => d.drop_value));
-    if (sourceRes.data) setLeadSources(sourceRes.data.map(d => d.drop_value));
+    if (statusRes.data) setLeadStatuses(statusRes.data.map(d => d.value));
+    if (sourceRes.data) setLeadSources(sourceRes.data.map(d => d.value));
   };
 
   const logActivity = async (action: string, details: string) => {
@@ -309,19 +259,15 @@ export default function Leads() {
 
   const moveToProspects = async (lead: Lead) => {
     const { data: prospectData, error: insertError } = await api.prospects.create({
-      prospect_name: lead.lead_name,
-      prospect_email: lead.lead_email,
-      prospect_phone: lead.lead_phone,
-      prospect_company: lead.lead_company,
-      prospect_position: lead.lead_position,
-      prospect_status: 'qualified',
-      prospect_source: lead.lead_source,
-      prospect_value: lead.lead_value,
-      prospect_notes: lead.lead_notes,
+      company_name: lead.company_name,
+      email: lead.email,
+      phone: lead.phone,
+      status: 'qualified',
+      notes: lead.notes,
       assigned_to: lead.assigned_to,
       created_by: user?.id,
       updated_by: user?.id,
-      original_lead_id: lead.id,
+      lead_id: lead.id,
     });
 
     if (insertError) {
@@ -336,21 +282,18 @@ export default function Leads() {
       return false;
     }
 
-    await logActivity('Convert Lead to Prospect', `Moved lead "${lead.lead_name}" to prospects`);
+    await logActivity('Convert Lead to Prospect', `Moved lead "${lead.company_name}" to prospects`);
     return true;
   };
 
   const handleAdd = () => {
     setFormData({
-      lead_name: '',
-      lead_email: '',
-      lead_phone: '',
-      lead_company: '',
-      lead_position: '',
-      lead_status: leadStatuses[0] || '',
-      lead_source: '',
-      lead_value: '',
-      lead_notes: '',
+      company_name: '',
+      email: '',
+      phone: '',
+      status: leadStatuses[0] || '',
+      source: '',
+      notes: '',
       assigned_to: '',
     });
     setShowAddPanel(true);
@@ -359,22 +302,19 @@ export default function Leads() {
   const handleEdit = (lead: Lead) => {
     setSelectedLead(lead);
     setFormData({
-      lead_name: lead.lead_name,
-      lead_email: lead.lead_email || '',
-      lead_phone: lead.lead_phone || '',
-      lead_company: lead.lead_company || '',
-      lead_position: lead.lead_position || '',
-      lead_status: lead.lead_status,
-      lead_source: lead.lead_source || '',
-      lead_value: lead.lead_value?.toString() || '',
-      lead_notes: lead.lead_notes || '',
+      company_name: lead.company_name,
+      email: lead.email || '',
+      phone: lead.phone || '',
+      status: lead.status,
+      source: lead.source || '',
+      notes: lead.notes || '',
       assigned_to: lead.assigned_to || '',
     });
     setShowEditPanel(true);
   };
 
   const handleDelete = async (lead: Lead) => {
-    if (!confirm(`Are you sure you want to delete lead "${lead.lead_name}"?`)) {
+    if (!confirm(`Are you sure you want to delete lead "${lead.company_name}"?`)) {
       return;
     }
 
@@ -383,7 +323,7 @@ export default function Leads() {
     if (error) {
       alert('Error deleting lead: ' + error.message);
     } else {
-      await logActivity('Delete Lead', `Deleted lead: ${lead.lead_name} (${lead.lead_company || 'No company'})`);
+      await logActivity('Delete Lead', `Deleted lead: ${lead.company_name}`);
       loadLeads();
     }
   };
@@ -391,27 +331,24 @@ export default function Leads() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.lead_name.trim()) {
-      alert('Please enter a lead name');
+    if (!formData.company_name.trim()) {
+      alert('Please enter a company name');
       return;
     }
 
     const leadData = {
-      lead_name: formData.lead_name.trim(),
-      lead_email: formData.lead_email.trim() || null,
-      lead_phone: formData.lead_phone.trim() || null,
-      lead_company: formData.lead_company.trim() || null,
-      lead_position: formData.lead_position.trim() || null,
-      lead_status: formData.lead_status,
-      lead_source: formData.lead_source || null,
-      lead_value: formData.lead_value ? parseFloat(formData.lead_value) : null,
-      lead_notes: formData.lead_notes.trim() || null,
+      company_name: formData.company_name.trim(),
+      email: formData.email.trim() || null,
+      phone: formData.phone.trim() || null,
+      status: formData.status,
+      source: formData.source || null,
+      notes: formData.notes.trim() || null,
       assigned_to: formData.assigned_to && formData.assigned_to.trim() !== '' ? formData.assigned_to : null,
     };
 
     if (showEditPanel && selectedLead) {
-      if (formData.lead_status === 'qualified') {
-        const moved = await moveToProspects({ ...selectedLead, lead_status: formData.lead_status });
+      if (formData.status === 'qualified') {
+        const moved = await moveToProspects({ ...selectedLead, status: formData.status });
         if (moved) {
           setShowEditPanel(false);
           loadLeads();
@@ -424,7 +361,7 @@ export default function Leads() {
       if (error) {
         alert('Error updating lead: ' + error.message);
       } else {
-        await logActivity('Update Lead', `Updated lead: ${formData.lead_name} (Status: ${formData.lead_status})`);
+        await logActivity('Update Lead', `Updated lead: ${formData.company_name} (Status: ${formData.status})`);
         setShowEditPanel(false);
         loadLeads();
       }
@@ -434,7 +371,7 @@ export default function Leads() {
       if (error) {
         alert('Error creating lead: ' + error.message);
       } else {
-        await logActivity('Create Lead', `Created new lead: ${formData.lead_name} (${formData.lead_company || 'No company'})`);
+        await logActivity('Create Lead', `Created new lead: ${formData.company_name}`);
         setShowAddPanel(false);
         loadLeads();
       }
@@ -443,13 +380,12 @@ export default function Leads() {
 
   const filteredLeads = leads.filter(lead => {
     const matchesSearch =
-      lead.lead_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.lead_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.lead_company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.lead_phone?.includes(searchTerm);
+      lead.company_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      lead.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      lead.phone?.includes(searchTerm);
 
-    const matchesStatus = statusFilter === 'all' || lead.lead_status === statusFilter;
-    const matchesSource = sourceFilter === 'all' || lead.lead_source === sourceFilter;
+    const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
+    const matchesSource = sourceFilter === 'all' || lead.source === sourceFilter;
 
     return matchesSearch && matchesStatus && matchesSource;
   });
@@ -543,10 +479,7 @@ export default function Leads() {
               <thead className="bg-slate-50 dark:bg-slate-900">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Company
+                    Company Name
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Contact
@@ -556,9 +489,6 @@ export default function Leads() {
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Source
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Value
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Assigned To
@@ -571,7 +501,7 @@ export default function Leads() {
               <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                 {filteredLeads.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+                    <td colSpan={6} className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
                       No leads found
                     </td>
                   </tr>
@@ -579,28 +509,19 @@ export default function Leads() {
                   filteredLeads.map((lead) => (
                     <tr key={lead.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-slate-900 dark:text-white">{lead.lead_name}</div>
-                        {lead.lead_position && (
-                          <div className="text-sm text-slate-500 dark:text-slate-400">{lead.lead_position}</div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white">
-                        {lead.lead_company || '-'}
+                        <div className="text-sm font-medium text-slate-900 dark:text-white">{lead.company_name}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-slate-900 dark:text-white">{lead.lead_email || '-'}</div>
-                        <div className="text-sm text-slate-500 dark:text-slate-400">{lead.lead_phone || '-'}</div>
+                        <div className="text-sm text-slate-900 dark:text-white">{lead.email || '-'}</div>
+                        <div className="text-sm text-slate-500 dark:text-slate-400">{lead.phone || '-'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(lead.lead_status)}`}>
-                          {capitalize(lead.lead_status)}
+                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(lead.status)}`}>
+                          {capitalize(lead.status)}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white">
-                        {lead.lead_source ? capitalize(lead.lead_source) : '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white">
-                        {lead.lead_value ? `${getCurrencySymbol()}${lead.lead_value.toLocaleString('en-IN')}` : '-'}
+                        {lead.source ? capitalize(lead.source) : '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white">
                         {lead.assigned_user?.name || 'Unassigned'}

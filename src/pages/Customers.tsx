@@ -9,15 +9,11 @@ import { api } from '../lib/api';
 
 interface Customer {
   id: string;
-  customer_name: string;
-  customer_email: string | null;
-  customer_phone: string | null;
+  contact_name: string;
+  email: string | null;
+  phone: string | null;
   customer_company: string | null;
-  customer_position: string | null;
-  customer_status: string;
-  customer_source: string | null;
-  customer_value: number | null;
-  customer_notes: string | null;
+  notes: string | null;
   assigned_to: string | null;
   created_at: string;
   updated_at: string;
@@ -56,15 +52,11 @@ interface DeliveryHistory {
 }
 
 interface CustomerFormData {
-  customer_name: string;
-  customer_email: string;
-  customer_phone: string;
+  contact_name: string;
+  email: string;
+  phone: string;
   customer_company: string;
-  customer_position: string;
-  customer_status: string;
-  customer_source: string;
-  customer_value: string;
-  customer_notes: string;
+  notes: string;
   assigned_to: string;
 }
 
@@ -74,25 +66,20 @@ interface CustomerFormProps {
   onSubmit: (e: React.FormEvent) => void;
   onCancel: () => void;
   isEdit: boolean;
-  customerStatuses: string[];
-  leadSources: string[];
   users: any[];
 }
 
-function CustomerForm({ formData, setFormData, onSubmit, onCancel, isEdit, customerStatuses, leadSources, users }: CustomerFormProps) {
-  const { getCurrencySymbol } = useCurrency();
-  const capitalize = (str: string) => str.charAt(0).toUpperCase() + str.slice(1).replace(/_/g, ' ');
-
+function CustomerForm({ formData, setFormData, onSubmit, onCancel, isEdit, users }: CustomerFormProps) {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div>
         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          Customer Name *
+          Contact Name *
         </label>
         <input
           type="text"
-          value={formData.customer_name}
-          onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
+          value={formData.contact_name}
+          onChange={(e) => setFormData({ ...formData, contact_name: e.target.value })}
           className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
           required
         />
@@ -104,8 +91,8 @@ function CustomerForm({ formData, setFormData, onSubmit, onCancel, isEdit, custo
         </label>
         <input
           type="email"
-          value={formData.customer_email}
-          onChange={(e) => setFormData({ ...formData, customer_email: e.target.value })}
+          value={formData.email}
+          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
           className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
         />
       </div>
@@ -116,8 +103,8 @@ function CustomerForm({ formData, setFormData, onSubmit, onCancel, isEdit, custo
         </label>
         <input
           type="tel"
-          value={formData.customer_phone}
-          onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
+          value={formData.phone}
+          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
           className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
         />
       </div>
@@ -131,69 +118,6 @@ function CustomerForm({ formData, setFormData, onSubmit, onCancel, isEdit, custo
           value={formData.customer_company}
           onChange={(e) => setFormData({ ...formData, customer_company: e.target.value })}
           className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          Position
-        </label>
-        <input
-          type="text"
-          value={formData.customer_position}
-          onChange={(e) => setFormData({ ...formData, customer_position: e.target.value })}
-          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          Status *
-        </label>
-        <select
-          value={formData.customer_status}
-          onChange={(e) => setFormData({ ...formData, customer_status: e.target.value })}
-          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-          required
-        >
-          {customerStatuses.map(status => (
-            <option key={status} value={status}>
-              {capitalize(status)}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          Source
-        </label>
-        <select
-          value={formData.customer_source}
-          onChange={(e) => setFormData({ ...formData, customer_source: e.target.value })}
-          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-        >
-          <option value="">Select source...</option>
-          {leadSources.map(source => (
-            <option key={source} value={source}>
-              {capitalize(source)}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          Lifetime Value ({getCurrencySymbol()})
-        </label>
-        <input
-          type="number"
-          step="0.01"
-          value={formData.customer_value}
-          onChange={(e) => setFormData({ ...formData, customer_value: e.target.value })}
-          onFocus={(e) => e.target.value === '0' && (e.target.value = '')}
-          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-          placeholder="0.00"
         />
       </div>
 
@@ -220,8 +144,8 @@ function CustomerForm({ formData, setFormData, onSubmit, onCancel, isEdit, custo
           Notes
         </label>
         <textarea
-          value={formData.customer_notes}
-          onChange={(e) => setFormData({ ...formData, customer_notes: e.target.value })}
+          value={formData.notes}
+          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
           rows={4}
           className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
         />
@@ -251,12 +175,8 @@ export default function Customers() {
   const { getCurrencySymbol, isViewOnly } = useCurrency();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [users, setUsers] = useState<any[]>([]);
-  const [customerStatuses, setCustomerStatuses] = useState<string[]>([]);
-  const [leadSources, setLeadSources] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [sourceFilter, setSourceFilter] = useState('all');
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [showEditPanel, setShowEditPanel] = useState(false);
   const [showSalesPanel, setShowSalesPanel] = useState(false);
@@ -269,22 +189,17 @@ export default function Customers() {
   const [deliveryHistory, setDeliveryHistory] = useState<Record<string, DeliveryHistory[]>>({});
   const [loadingHistory, setLoadingHistory] = useState<Record<string, boolean>>({});
   const [formData, setFormData] = useState<CustomerFormData>({
-    customer_name: '',
-    customer_email: '',
-    customer_phone: '',
+    contact_name: '',
+    email: '',
+    phone: '',
     customer_company: '',
-    customer_position: '',
-    customer_status: '',
-    customer_source: '',
-    customer_value: '',
-    customer_notes: '',
+    notes: '',
     assigned_to: '',
   });
 
   useEffect(() => {
     loadCustomers();
     loadUsers();
-    loadDropdowns();
   }, []);
 
   const capitalize = (str: string) => str.charAt(0).toUpperCase() + str.slice(1).replace(/_/g, ' ');
@@ -331,31 +246,17 @@ export default function Customers() {
     }
   };
 
-  const loadDropdowns = async () => {
-    const [statusRes, sourceRes] = await Promise.all([
-      api.dropdowns.getValues(''),
-      api.dropdowns.getValues(''),
-    ]);
-
-    if (statusRes.data) setCustomerStatuses(statusRes.data.map(d => d.drop_value));
-    if (sourceRes.data) setLeadSources(sourceRes.data.map(d => d.drop_value));
-  };
-
   const logActivity = async (action: string, details: string) => {
     await api.activityLogs.create(action, { message: details });
   };
 
   const handleAdd = () => {
     setFormData({
-      customer_name: '',
-      customer_email: '',
-      customer_phone: '',
+      contact_name: '',
+      email: '',
+      phone: '',
       customer_company: '',
-      customer_position: '',
-      customer_status: customerStatuses[0] || '',
-      customer_source: '',
-      customer_value: '',
-      customer_notes: '',
+      notes: '',
       assigned_to: '',
     });
     setShowAddPanel(true);
@@ -364,15 +265,11 @@ export default function Customers() {
   const handleEdit = (customer: Customer) => {
     setSelectedCustomer(customer);
     setFormData({
-      customer_name: customer.customer_name,
-      customer_email: customer.customer_email || '',
-      customer_phone: customer.customer_phone || '',
+      contact_name: customer.contact_name,
+      email: customer.email || '',
+      phone: customer.phone || '',
       customer_company: customer.customer_company || '',
-      customer_position: customer.customer_position || '',
-      customer_status: customer.customer_status,
-      customer_source: customer.customer_source || '',
-      customer_value: customer.customer_value?.toString() || '',
-      customer_notes: customer.customer_notes || '',
+      notes: customer.notes || '',
       assigned_to: customer.assigned_to || '',
     });
     setShowEditPanel(true);
@@ -389,7 +286,7 @@ export default function Customers() {
   };
 
   const handleDelete = async (customer: Customer) => {
-    if (!confirm(`Are you sure you want to delete customer "${customer.customer_name}"?`)) {
+    if (!confirm(`Are you sure you want to delete customer "${customer.contact_name}"?`)) {
       return;
     }
 
@@ -398,7 +295,7 @@ export default function Customers() {
     if (error) {
       alert('Error deleting customer: ' + error.message);
     } else {
-      await logActivity('Delete Customer', `Deleted customer: ${customer.customer_name} (${customer.customer_company || 'No company'})`);
+      await logActivity('Delete Customer', `Deleted customer: ${customer.contact_name} (${customer.customer_company || 'No company'})`);
       loadCustomers();
     }
   };
@@ -406,21 +303,17 @@ export default function Customers() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.customer_name.trim()) {
-      alert('Please enter a customer name');
+    if (!formData.contact_name.trim()) {
+      alert('Please enter a contact name');
       return;
     }
 
     const customerData = {
-      customer_name: formData.customer_name.trim(),
-      customer_email: formData.customer_email.trim() || null,
-      customer_phone: formData.customer_phone.trim() || null,
+      contact_name: formData.contact_name.trim(),
+      email: formData.email.trim() || null,
+      phone: formData.phone.trim() || null,
       customer_company: formData.customer_company.trim() || null,
-      customer_position: formData.customer_position.trim() || null,
-      customer_status: formData.customer_status,
-      customer_source: formData.customer_source || null,
-      customer_value: formData.customer_value ? parseFloat(formData.customer_value) : null,
-      customer_notes: formData.customer_notes.trim() || null,
+      notes: formData.notes.trim() || null,
       assigned_to: formData.assigned_to && formData.assigned_to.trim() !== '' ? formData.assigned_to : null,
     };
 
@@ -430,7 +323,7 @@ export default function Customers() {
       if (error) {
         alert('Error updating customer: ' + error.message);
       } else {
-        await logActivity('Update Customer', `Updated customer: ${formData.customer_name} (Status: ${formData.customer_status})`);
+        await logActivity('Update Customer', `Updated customer: ${formData.contact_name}`);
         setShowEditPanel(false);
         loadCustomers();
       }
@@ -440,7 +333,7 @@ export default function Customers() {
       if (error) {
         alert('Error creating customer: ' + error.message);
       } else {
-        await logActivity('Create Customer', `Created new customer: ${formData.customer_name} (${formData.customer_company || 'No company'})`);
+        await logActivity('Create Customer', `Created new customer: ${formData.contact_name} (${formData.customer_company || 'No company'})`);
         setShowAddPanel(false);
         loadCustomers();
       }
@@ -449,26 +342,13 @@ export default function Customers() {
 
   const filteredCustomers = customers.filter(customer => {
     const matchesSearch =
-      customer.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.customer_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      customer.contact_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      customer.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       customer.customer_company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.customer_phone?.includes(searchTerm);
+      customer.phone?.includes(searchTerm);
 
-    const matchesStatus = statusFilter === 'all' || customer.customer_status === statusFilter;
-    const matchesSource = sourceFilter === 'all' || customer.customer_source === sourceFilter;
-
-    return matchesSearch && matchesStatus && matchesSource;
+    return matchesSearch;
   });
-
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      active: 'bg-emerald-100 text-emerald-800',
-      inactive: 'bg-slate-100 text-slate-800',
-      at_risk: 'bg-orange-100 text-orange-800',
-      churned: 'bg-red-100 text-red-800',
-    };
-    return colors[status] || 'bg-gray-100 text-gray-800';
-  };
 
   const handleCancel = () => {
     setShowAddPanel(false);
@@ -527,7 +407,7 @@ export default function Customers() {
       </div>
 
       <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
@@ -537,36 +417,6 @@ export default function Customers() {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
             />
-          </div>
-
-          <div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-            >
-              <option value="all">All Statuses</option>
-              {customerStatuses.map(status => (
-                <option key={status} value={status}>
-                  {capitalize(status)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <select
-              value={sourceFilter}
-              onChange={(e) => setSourceFilter(e.target.value)}
-              className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-            >
-              <option value="all">All Sources</option>
-              {leadSources.map(source => (
-                <option key={source} value={source}>
-                  {capitalize(source)}
-                </option>
-              ))}
-            </select>
           </div>
         </div>
       </div>
@@ -584,22 +434,13 @@ export default function Customers() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider w-10">
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Name
+                    Contact Name
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Company
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Contact
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Source
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Lifetime Value
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Assigned To
@@ -612,7 +453,7 @@ export default function Customers() {
               <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                 {filteredCustomers.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+                    <td colSpan={6} className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
                       No customers found
                     </td>
                   </tr>
@@ -634,28 +475,14 @@ export default function Customers() {
                           </button>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-slate-900 dark:text-white">{customer.customer_name}</div>
-                          {customer.customer_position && (
-                            <div className="text-sm text-slate-500 dark:text-slate-400">{customer.customer_position}</div>
-                          )}
+                          <div className="text-sm font-medium text-slate-900 dark:text-white">{customer.contact_name}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white">
                           {customer.customer_company || '-'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-slate-900 dark:text-white">{customer.customer_email || '-'}</div>
-                          <div className="text-sm text-slate-500 dark:text-slate-400">{customer.customer_phone || '-'}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(customer.customer_status)}`}>
-                            {capitalize(customer.customer_status)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white">
-                          {customer.customer_source ? capitalize(customer.customer_source) : '-'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white">
-                          {customer.customer_value ? `${getCurrencySymbol()}${customer.customer_value.toLocaleString('en-IN')}` : '-'}
+                          <div className="text-sm text-slate-900 dark:text-white">{customer.email || '-'}</div>
+                          <div className="text-sm text-slate-500 dark:text-slate-400">{customer.phone || '-'}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white">
                           {customer.assigned_user?.name || 'Unassigned'}
@@ -697,7 +524,7 @@ export default function Customers() {
                       </tr>
                       {expandedCustomer === customer.id && (
                         <tr key={`${customer.id}-expanded`} className="bg-slate-50 dark:bg-slate-900">
-                          <td colSpan={9} className="px-6 py-4 space-y-6">
+                          <td colSpan={6} className="px-6 py-4 space-y-6">
                             {loadingHistory[customer.id] ? (
                               <div className="flex justify-center py-8">
                                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600" />
@@ -833,8 +660,6 @@ export default function Customers() {
           onSubmit={handleSubmit}
           onCancel={handleCancel}
           isEdit={false}
-          customerStatuses={customerStatuses}
-          leadSources={leadSources}
           users={users}
         />
       </SidePanel>
@@ -850,8 +675,6 @@ export default function Customers() {
           onSubmit={handleSubmit}
           onCancel={handleCancel}
           isEdit={true}
-          customerStatuses={customerStatuses}
-          leadSources={leadSources}
           users={users}
         />
       </SidePanel>
@@ -859,7 +682,7 @@ export default function Customers() {
       {showSalesPanel && salesCustomer && (
         <SalesPanel
           customerId={salesCustomer.id}
-          customerName={salesCustomer.customer_name}
+          customerName={salesCustomer.contact_name}
           onClose={() => {
             setShowSalesPanel(false);
             setSalesCustomer(null);
@@ -876,9 +699,9 @@ export default function Customers() {
         isOpen={showPOForm}
         customer={poCustomer ? {
           id: poCustomer.id,
-          customer_name: poCustomer.customer_name,
-          customer_email: poCustomer.customer_email || '',
-          customer_phone: poCustomer.customer_phone || '',
+          customer_name: poCustomer.contact_name,
+          customer_email: poCustomer.email || '',
+          customer_phone: poCustomer.phone || '',
           customer_address: ''
         } : {
           id: '',

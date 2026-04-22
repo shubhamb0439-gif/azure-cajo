@@ -13,21 +13,19 @@ type DropdownValue = Database['public']['Tables']['dropdown_values']['Row'];
 
 interface PurchaseItemHistory {
   id: string;
-  quantity: number;
+  quantity_ordered: number;
   quantity_received: number;
   unit_cost: number;
-  lead_time: number;
+  lead_time_days: number;
   vendor_item_code: string | null;
-  received: boolean;
-  purchase_date: string;
-  purchase_po_number: string | null;
+  created_at: string;
+  po_reference: string | null;
   vendor_name: string | null;
 }
 
 interface AssemblyHistory {
   id: string;
-  assembly_name: string;
-  assembly_quantity: number;
+  quantity: number;
   created_at: string;
   bom_name: string;
   created_by_name: string | null;
@@ -35,7 +33,6 @@ interface AssemblyHistory {
 
 interface UsageHistory {
   id: string;
-  assembly_name: string;
   quantity_used: number;
   created_at: string;
   bom_name: string;
@@ -45,9 +42,8 @@ interface UsageHistory {
 
 interface SalesHistory {
   id: string;
-  sale_number: string;
+  order_number: string;
   customer_name: string;
-  assembly_name: string;
   serial_number: string;
   quantity_sold: number;
   sale_date: string;
@@ -61,10 +57,8 @@ export default function Inventory() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [filteredItems, setFilteredItems] = useState<InventoryItem[]>([]);
   const [groups, setGroups] = useState<string[]>([]);
-  const [classes, setClasses] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterGroup, setFilterGroup] = useState('');
-  const [filterClass, setFilterClass] = useState('');
   const [loading, setLoading] = useState(true);
   const [showItemForm, setShowItemForm] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
@@ -103,20 +97,18 @@ export default function Inventory() {
 
   useEffect(() => {
     filterItems();
-  }, [items, searchTerm, filterGroup, filterClass]);
+  }, [items, searchTerm, filterGroup]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [itemsRes, groupsRes, classesRes] = await Promise.all([
+      const [itemsRes, groupsRes] = await Promise.all([
         api.inventory.getAll(),
-        api.dropdowns.getValues(''),
-        api.dropdowns.getValues(''),
+        api.dropdowns.getValues('item_group'),
       ]);
 
       if (itemsRes.data) setItems(itemsRes.data);
-      if (groupsRes.data) setGroups(groupsRes.data.map(g => g.drop_value));
-      if (classesRes.data) setClasses(classesRes.data.map(c => c.drop_value));
+      if (groupsRes.data) setGroups(groupsRes.data.map(g => g.value));
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -130,17 +122,13 @@ export default function Inventory() {
     if (searchTerm) {
       filtered = filtered.filter(
         (item) =>
-          item.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          item.item_id.toLowerCase().includes(searchTerm.toLowerCase())
+          item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.sku.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
     if (filterGroup) {
-      filtered = filtered.filter((item) => item.item_group === filterGroup);
-    }
-
-    if (filterClass) {
-      filtered = filtered.filter((item) => item.item_class === filterClass);
+      filtered = filtered.filter((item) => item.category === filterGroup);
     }
 
     setFilteredItems(filtered);
@@ -177,18 +165,17 @@ export default function Inventory() {
             const purchases: PurchaseItemHistory[] = [];
             for (const purchase of purchasesData) {
               for (const item of (purchase.purchase_items || [])) {
-                if ((item as any).item_id === itemId) {
+                if ((item as any).inventory_item_id === itemId) {
                   purchases.push({
                     id: item.id,
-                    quantity: (item as any).quantity,
+                    quantity_ordered: (item as any).quantity_ordered,
                     quantity_received: (item as any).quantity_received || 0,
                     unit_cost: (item as any).unit_cost,
-                    lead_time: (item as any).lead_time,
+                    lead_time_days: (item as any).lead_time_days,
                     vendor_item_code: (item as any).vendor_item_code,
-                    received: (item as any).received,
-                    purchase_date: (purchase as any).purchase_date,
-                    purchase_po_number: (purchase as any).purchase_po_number,
-                    vendor_name: (purchase as any).vendors?.vendor_name || null,
+                    created_at: (purchase as any).created_at,
+                    po_reference: (purchase as any).po_reference,
+                    vendor_name: (purchase as any).vendors?.name || null,
                   });
                 }
               }
@@ -206,13 +193,12 @@ export default function Inventory() {
         try {
           const { data: assembliesAllData } = await api.assemblies.getAll();
           if (assembliesAllData) {
-            const filtered = (assembliesAllData as any[]).filter(a => a.boms?.bom_item_id === itemId);
+            const filtered = (assembliesAllData as any[]).filter(a => a.boms?.finished_product_id === itemId);
             const assemblies: AssemblyHistory[] = filtered.map((a: any) => ({
               id: a.id,
-              assembly_name: a.assembly_name,
-              assembly_quantity: a.assembly_quantity,
+              quantity: a.quantity,
               created_at: a.created_at,
-              bom_name: a.boms?.bom_name || '',
+              bom_name: a.boms?.name || '',
               created_by_name: a.users?.name || null,
             }));
             setItemAssemblies(prev => ({ ...prev, [itemId]: assemblies }));
@@ -230,13 +216,13 @@ export default function Inventory() {
           const { data: assembliesData } = await api.assemblies.getAll();
 
           if (bomsData && assembliesData) {
-            const relevantBomComponents: { bom_id: string; bom_component_quantity: number }[] = [];
+            const relevantBomComponents: { bom_id: string; quantity_required: number }[] = [];
             for (const bom of bomsData) {
               for (const comp of ((bom as any).bom_components || [])) {
-                if (comp.bom_component_item_id === itemId) {
+                if (comp.inventory_item_id === itemId) {
                   relevantBomComponents.push({
                     bom_id: (bom as any).id,
-                    bom_component_quantity: comp.bom_component_quantity,
+                    quantity_required: comp.quantity_required,
                   });
                 }
               }
@@ -248,13 +234,12 @@ export default function Inventory() {
                 const bomItem = relevantBomComponents.find(bi => bi.bom_id === (assembly as any).bom_id);
                 if (!bomItem) continue;
 
-                const quantityUsed = bomItem.bom_component_quantity * assembly.assembly_quantity;
+                const quantityUsed = bomItem.quantity_required * assembly.quantity;
                 usages.push({
                   id: assembly.id,
-                  assembly_name: assembly.assembly_name,
                   quantity_used: quantityUsed,
                   created_at: assembly.created_at,
-                  bom_name: (assembly as any).boms?.bom_name || '',
+                  bom_name: (assembly as any).boms?.name || '',
                   vendor_name: 'Cajo Technologies',
                   source_type: null,
                 });
@@ -280,9 +265,8 @@ export default function Inventory() {
               if (item.delivered) {
                 sales.push({
                   id: sale.id,
-                  sale_number: (sale as any).sale_number,
+                  order_number: (sale as any).order_number,
                   customer_name: (sale as any).customers?.customer_name || 'Unknown',
-                  assembly_name: (item.assembly_units as any)?.assemblies?.assembly_name || 'Unknown',
                   serial_number: item.serial_number,
                   quantity_sold: 1,
                   sale_date: (sale as any).sale_date,
@@ -330,7 +314,7 @@ export default function Inventory() {
       </div>
 
       <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
@@ -354,19 +338,6 @@ export default function Inventory() {
               </option>
             ))}
           </select>
-
-          <select
-            value={filterClass}
-            onChange={(e) => setFilterClass(e.target.value)}
-            className="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-          >
-            <option value="">All Classes</option>
-            {classes.map((cls) => (
-              <option key={cls} value={cls}>
-                {cls}
-              </option>
-            ))}
-          </select>
         </div>
       </div>
 
@@ -377,16 +348,13 @@ export default function Inventory() {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider w-8"></th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Item Code
+                  SKU
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Name
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Group
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Class
+                  Category
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Stock
@@ -398,10 +366,7 @@ export default function Inventory() {
                   Unit
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Avg Cost
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Avg Lead Time
+                  Unit Cost
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Actions
@@ -425,46 +390,38 @@ export default function Inventory() {
                       </button>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 dark:text-white">
-                      {item.item_id}
+                      {item.sku}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700 dark:text-slate-300">
-                      {item.item_name}
+                      {item.name}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700 dark:text-slate-300">
-                      {item.item_group || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700 dark:text-slate-300">
-                      {item.item_class || '-'}
+                      {item.category || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <div className="flex items-center space-x-2">
                         <span
                           className={`font-medium ${
-                            item.item_stock_current < item.item_stock_min
+                            item.quantity_in_stock < item.reorder_point
                               ? 'text-red-600 dark:text-red-400'
-                              : item.item_stock_current > item.item_stock_max
-                              ? 'text-orange-600 dark:text-orange-400'
                               : 'text-slate-900 dark:text-white'
                           }`}
                         >
-                          {item.item_stock_current}
+                          {item.quantity_in_stock}
                         </span>
-                        {(item.item_stock_current < item.item_stock_min || item.item_stock_current > item.item_stock_max) && (
+                        {item.quantity_in_stock < item.reorder_point && (
                           <AlertCircle className="w-4 h-4 text-red-600" />
                         )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700 dark:text-slate-300">
-                      {item.item_stock_sold || 0}
+                      {item.sales_sold || 0}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700 dark:text-slate-300">
-                      {item.item_unit}
+                      {item.unit}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700 dark:text-slate-300">
-                      {getCurrencySymbol()}{formatAmount(item.item_cost_average)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700 dark:text-slate-300">
-                      {item.item_lead_time_average > 0 ? `${item.item_lead_time_average.toFixed(1)} days` : '-'}
+                      {getCurrencySymbol()}{formatAmount(item.unit_cost)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm space-x-2">
                       {hasWriteAccess && !isViewOnly && (
@@ -490,7 +447,7 @@ export default function Inventory() {
                             <Pencil className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => handleDelete(item.id, item.item_name)}
+                            onClick={() => handleDelete(item.id, item.name)}
                             className="inline-flex items-center p-1.5 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
                             title="Delete"
                           >
@@ -502,7 +459,7 @@ export default function Inventory() {
                   </tr>
                   {expandedRows.has(item.id) && (
                     <tr key={`${item.id}-expanded`} className="bg-slate-50 dark:bg-slate-900">
-                      <td colSpan={10} className="px-6 py-4 space-y-6">
+                      <td colSpan={9} className="px-6 py-4 space-y-6">
                         <div>
                           <div className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Purchase History</div>
                           {itemPurchases[item.id] && itemPurchases[item.id].length > 0 ? (
@@ -525,11 +482,11 @@ export default function Inventory() {
                               <tbody>
                                 {itemPurchases[item.id].map((purchase) => {
                                   const quantityDelivered = purchase.quantity_received || 0;
-                                  const quantityUndelivered = purchase.quantity - quantityDelivered;
+                                  const quantityUndelivered = purchase.quantity_ordered - quantityDelivered;
                                   return (
                                     <tr key={purchase.id} className="border-b border-slate-100 dark:border-slate-800">
                                       <td className="py-2 text-slate-700 dark:text-slate-300">
-                                        {formatDate(purchase.purchase_date)}
+                                        {formatDate(purchase.created_at)}
                                       </td>
                                       <td className="py-2 text-slate-700 dark:text-slate-300">
                                         {purchase.vendor_name || '-'}
@@ -538,7 +495,7 @@ export default function Inventory() {
                                         {purchase.vendor_item_code || '-'}
                                       </td>
                                       <td className="py-2 text-right text-slate-700 dark:text-slate-300">
-                                        {purchase.quantity}
+                                        {purchase.quantity_ordered}
                                       </td>
                                       <td className="py-2 text-right text-slate-700 dark:text-slate-300">
                                         <span className={quantityDelivered > 0 ? 'text-green-600 dark:text-green-400 font-medium' : ''}>
@@ -554,22 +511,22 @@ export default function Inventory() {
                                         {getCurrencySymbol()}{formatAmount(purchase.unit_cost)}
                                       </td>
                                       <td className="py-2 text-right text-slate-700 dark:text-slate-300">
-                                        {getCurrencySymbol()}{formatAmount(purchase.quantity * purchase.unit_cost)}
+                                        {getCurrencySymbol()}{formatAmount(purchase.quantity_ordered * purchase.unit_cost)}
                                       </td>
                                       <td className="py-2 text-slate-700 dark:text-slate-300">
-                                        {purchase.lead_time > 0 ? `${purchase.lead_time} days` : '-'}
+                                        {purchase.lead_time_days > 0 ? `${purchase.lead_time_days} days` : '-'}
                                       </td>
                                       <td className="py-2 text-slate-700 dark:text-slate-300">
-                                        {purchase.purchase_po_number || '-'}
+                                        {purchase.po_reference || '-'}
                                       </td>
                                       <td className="py-2 text-center">
-                                        {quantityDelivered >= purchase.quantity ? (
+                                        {quantityDelivered >= purchase.quantity_ordered ? (
                                           <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 rounded">
                                             Complete
                                           </span>
                                         ) : quantityDelivered > 0 ? (
                                           <span className="px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400 rounded">
-                                            {((quantityDelivered / purchase.quantity) * 100).toFixed(0)}%
+                                            {((quantityDelivered / purchase.quantity_ordered) * 100).toFixed(0)}%
                                           </span>
                                         ) : (
                                           <span className="px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-800 dark:bg-slate-900/20 dark:text-slate-400 rounded">
@@ -594,7 +551,6 @@ export default function Inventory() {
                               <thead>
                                 <tr className="border-b border-slate-200 dark:border-slate-700">
                                   <th className="text-left py-2 text-slate-600 dark:text-slate-400">Date</th>
-                                  <th className="text-left py-2 text-slate-600 dark:text-slate-400">Assembly Name</th>
                                   <th className="text-left py-2 text-slate-600 dark:text-slate-400">BOM</th>
                                   <th className="text-left py-2 text-slate-600 dark:text-slate-400">Quantity</th>
                                   <th className="text-left py-2 text-slate-600 dark:text-slate-400">Created By</th>
@@ -606,9 +562,8 @@ export default function Inventory() {
                                     <td className="py-2 text-slate-700 dark:text-slate-300">
                                       {formatDate(assembly.created_at)}
                                     </td>
-                                    <td className="py-2 text-slate-700 dark:text-slate-300">{assembly.assembly_name}</td>
                                     <td className="py-2 text-slate-700 dark:text-slate-300">{assembly.bom_name}</td>
-                                    <td className="py-2 text-slate-700 dark:text-slate-300">+{assembly.assembly_quantity}</td>
+                                    <td className="py-2 text-slate-700 dark:text-slate-300">+{assembly.quantity}</td>
                                     <td className="py-2 text-slate-700 dark:text-slate-300">{assembly.created_by_name || '-'}</td>
                                   </tr>
                                 ))}
@@ -626,7 +581,6 @@ export default function Inventory() {
                               <thead>
                                 <tr className="border-b border-slate-200 dark:border-slate-700">
                                   <th className="text-left py-2 text-slate-600 dark:text-slate-400">Date</th>
-                                  <th className="text-left py-2 text-slate-600 dark:text-slate-400">Used In Assembly</th>
                                   <th className="text-left py-2 text-slate-600 dark:text-slate-400">BOM</th>
                                   <th className="text-left py-2 text-slate-600 dark:text-slate-400">Quantity Used</th>
                                   <th className="text-left py-2 text-slate-600 dark:text-slate-400">Source</th>
@@ -638,7 +592,6 @@ export default function Inventory() {
                                     <td className="py-2 text-slate-700 dark:text-slate-300">
                                       {formatDate(usage.created_at)}
                                     </td>
-                                    <td className="py-2 text-slate-700 dark:text-slate-300">{usage.assembly_name}</td>
                                     <td className="py-2 text-slate-700 dark:text-slate-300">{usage.bom_name}</td>
                                     <td className="py-2 text-slate-700 dark:text-slate-300">-{usage.quantity_used}</td>
                                     <td className="py-2 text-slate-700 dark:text-slate-300">{usage.vendor_name}</td>
@@ -658,9 +611,8 @@ export default function Inventory() {
                               <thead>
                                 <tr className="border-b border-slate-200 dark:border-slate-700">
                                   <th className="text-left py-2 text-slate-600 dark:text-slate-400">Delivery Date</th>
-                                  <th className="text-left py-2 text-slate-600 dark:text-slate-400">Sale #</th>
+                                  <th className="text-left py-2 text-slate-600 dark:text-slate-400">Order #</th>
                                   <th className="text-left py-2 text-slate-600 dark:text-slate-400">Customer</th>
-                                  <th className="text-left py-2 text-slate-600 dark:text-slate-400">Assembly</th>
                                   <th className="text-left py-2 text-slate-600 dark:text-slate-400">Serial Number</th>
                                   <th className="text-left py-2 text-slate-600 dark:text-slate-400">Quantity</th>
                                 </tr>
@@ -671,9 +623,8 @@ export default function Inventory() {
                                     <td className="py-2 text-slate-700 dark:text-slate-300">
                                       {sale.delivered_at ? formatDate(sale.delivered_at) : '-'}
                                     </td>
-                                    <td className="py-2 text-slate-700 dark:text-slate-300">{sale.sale_number}</td>
+                                    <td className="py-2 text-slate-700 dark:text-slate-300">{sale.order_number}</td>
                                     <td className="py-2 text-slate-700 dark:text-slate-300">{sale.customer_name}</td>
-                                    <td className="py-2 text-slate-700 dark:text-slate-300">{sale.assembly_name}</td>
                                     <td className="py-2 text-slate-700 dark:text-slate-300">{sale.serial_number}</td>
                                     <td className="py-2 text-slate-700 dark:text-slate-300">-{sale.quantity_sold}</td>
                                   </tr>
@@ -704,7 +655,6 @@ export default function Inventory() {
         <ItemFormPanel
           item={editingItem}
           groups={groups}
-          classes={classes}
           onClose={() => {
             setShowItemForm(false);
             setEditingItem(null);
@@ -738,24 +688,20 @@ export default function Inventory() {
 interface ItemFormPanelProps {
   item: InventoryItem | null;
   groups: string[];
-  classes: string[];
   onClose: () => void;
   onSuccess: () => void;
 }
 
-function ItemFormPanel({ item, groups, classes, onClose, onSuccess }: ItemFormPanelProps) {
+function ItemFormPanel({ item, groups, onClose, onSuccess }: ItemFormPanelProps) {
   const { userProfile } = useAuth();
   const [formData, setFormData] = useState({
-    item_id: item?.item_id || '',
-    item_name: item?.item_name || '',
-    item_display_name: item?.item_display_name || '',
-    item_unit: item?.item_unit || 'pcs',
-    item_group: item?.item_group || '',
-    item_class: item?.item_class || '',
-    item_stock_min: item?.item_stock_min || 0,
-    item_stock_max: item?.item_stock_max || 0,
-    item_stock_reorder: item?.item_stock_reorder || 0,
-    item_serial_number_tracked: item?.item_serial_number_tracked || false,
+    sku: item?.sku || '',
+    name: item?.name || '',
+    description: item?.description || '',
+    unit: item?.unit || 'pcs',
+    category: item?.category || '',
+    reorder_point: item?.reorder_point || 0,
+    is_finished_product: item?.is_finished_product || false,
   });
   const [loading, setLoading] = useState(false);
 
@@ -769,13 +715,13 @@ function ItemFormPanel({ item, groups, classes, onClose, onSuccess }: ItemFormPa
 
         if (error) throw error;
 
-        await api.activityLogs.create('UPDATE_ITEM', { itemId: item.item_id, itemName: formData.item_name });
+        await api.activityLogs.create('UPDATE_ITEM', { itemId: item.sku, itemName: formData.name });
       } else {
         const { error } = await api.inventory.create(formData);
 
         if (error) throw error;
 
-        await api.activityLogs.create('CREATE_ITEM', { itemId: formData.item_id, itemName: formData.item_name });
+        await api.activityLogs.create('CREATE_ITEM', { itemId: formData.sku, itemName: formData.name });
       }
 
       onSuccess();
@@ -792,12 +738,12 @@ function ItemFormPanel({ item, groups, classes, onClose, onSuccess }: ItemFormPa
       <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Item Code *
+              SKU *
             </label>
             <input
               type="text"
-              value={formData.item_id}
-              onChange={(e) => setFormData({ ...formData, item_id: e.target.value })}
+              value={formData.sku}
+              onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
               required
               disabled={!!item}
               className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white disabled:opacity-50"
@@ -806,12 +752,12 @@ function ItemFormPanel({ item, groups, classes, onClose, onSuccess }: ItemFormPa
 
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Item Name *
+              Name *
             </label>
             <input
               type="text"
-              value={formData.item_name}
-              onChange={(e) => setFormData({ ...formData, item_name: e.target.value })}
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               required
               className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
             />
@@ -819,12 +765,12 @@ function ItemFormPanel({ item, groups, classes, onClose, onSuccess }: ItemFormPa
 
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Display Name
+              Description
             </label>
             <input
               type="text"
-              value={formData.item_display_name}
-              onChange={(e) => setFormData({ ...formData, item_display_name: e.target.value })}
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
             />
           </div>
@@ -835,8 +781,8 @@ function ItemFormPanel({ item, groups, classes, onClose, onSuccess }: ItemFormPa
             </label>
             <input
               type="text"
-              value={formData.item_unit}
-              onChange={(e) => setFormData({ ...formData, item_unit: e.target.value })}
+              value={formData.unit}
+              onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
               required
               className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
             />
@@ -844,15 +790,15 @@ function ItemFormPanel({ item, groups, classes, onClose, onSuccess }: ItemFormPa
 
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Group *
+              Category *
             </label>
             <select
-              value={formData.item_group}
-              onChange={(e) => setFormData({ ...formData, item_group: e.target.value })}
+              value={formData.category}
+              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
               required
               className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
             >
-              <option value="">Select Group</option>
+              <option value="">Select Category</option>
               {groups.map((group) => (
                 <option key={group} value={group}>
                   {group}
@@ -863,73 +809,27 @@ function ItemFormPanel({ item, groups, classes, onClose, onSuccess }: ItemFormPa
 
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Class
+              Reorder Point
             </label>
-            <select
-              value={formData.item_class}
-              onChange={(e) => setFormData({ ...formData, item_class: e.target.value })}
+            <input
+              type="number"
+              value={formData.reorder_point}
+              onChange={(e) => setFormData({ ...formData, reorder_point: parseFloat(e.target.value) })}
+              onFocus={(e) => e.target.value === '0' && (e.target.value = '')}
               className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-            >
-              <option value="">Select Class</option>
-              {classes.map((cls) => (
-                <option key={cls} value={cls}>
-                  {cls}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Min Stock
-              </label>
-              <input
-                type="number"
-                value={formData.item_stock_min}
-                onChange={(e) => setFormData({ ...formData, item_stock_min: parseFloat(e.target.value) })}
-                onFocus={(e) => e.target.value === '0' && (e.target.value = '')}
-                className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Max Stock
-              </label>
-              <input
-                type="number"
-                value={formData.item_stock_max}
-                onChange={(e) => setFormData({ ...formData, item_stock_max: parseFloat(e.target.value) })}
-                onFocus={(e) => e.target.value === '0' && (e.target.value = '')}
-                className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Reorder
-              </label>
-              <input
-                type="number"
-                value={formData.item_stock_reorder}
-                onChange={(e) => setFormData({ ...formData, item_stock_reorder: parseFloat(e.target.value) })}
-                onFocus={(e) => e.target.value === '0' && (e.target.value = '')}
-                className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-              />
-            </div>
+            />
           </div>
 
           <div className="flex items-center">
             <input
               type="checkbox"
-              id="serial_tracked"
-              checked={formData.item_serial_number_tracked}
-              onChange={(e) => setFormData({ ...formData, item_serial_number_tracked: e.target.checked })}
+              id="is_finished_product"
+              checked={formData.is_finished_product}
+              onChange={(e) => setFormData({ ...formData, is_finished_product: e.target.checked })}
               className="w-4 h-4 text-green-600 border-slate-300 rounded focus:ring-2 focus:ring-green-500"
             />
-            <label htmlFor="serial_tracked" className="ml-2 text-sm text-slate-700 dark:text-slate-300">
-              Track Serial Numbers
+            <label htmlFor="is_finished_product" className="ml-2 text-sm text-slate-700 dark:text-slate-300">
+              Finished Product
             </label>
           </div>
 
@@ -953,4 +853,3 @@ function ItemFormPanel({ item, groups, classes, onClose, onSuccess }: ItemFormPa
     </SidePanel>
   );
 }
-

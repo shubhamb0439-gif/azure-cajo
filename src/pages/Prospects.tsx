@@ -7,15 +7,12 @@ import { api } from '../lib/api';
 
 interface Prospect {
   id: string;
-  prospect_name: string;
-  prospect_email: string | null;
-  prospect_phone: string | null;
-  prospect_company: string | null;
-  prospect_position: string | null;
-  prospect_status: string;
-  prospect_source: string | null;
-  prospect_value: number | null;
-  prospect_notes: string | null;
+  company_name: string;
+  email: string | null;
+  phone: string | null;
+  status: string;
+  notes: string | null;
+  lead_id: string | null;
   assigned_to: string | null;
   created_at: string;
   updated_at: string;
@@ -25,15 +22,11 @@ interface Prospect {
 }
 
 interface ProspectFormData {
-  prospect_name: string;
-  prospect_email: string;
-  prospect_phone: string;
-  prospect_company: string;
-  prospect_position: string;
-  prospect_status: string;
-  prospect_source: string;
-  prospect_value: string;
-  prospect_notes: string;
+  company_name: string;
+  email: string;
+  phone: string;
+  status: string;
+  notes: string;
   assigned_to: string;
 }
 
@@ -44,24 +37,22 @@ interface ProspectFormProps {
   onCancel: () => void;
   isEdit: boolean;
   prospectStatuses: string[];
-  leadSources: string[];
   users: any[];
 }
 
-function ProspectForm({ formData, setFormData, onSubmit, onCancel, isEdit, prospectStatuses, leadSources, users }: ProspectFormProps) {
-  const { getCurrencySymbol } = useCurrency();
+function ProspectForm({ formData, setFormData, onSubmit, onCancel, isEdit, prospectStatuses, users }: ProspectFormProps) {
   const capitalize = (str: string) => str.charAt(0).toUpperCase() + str.slice(1).replace(/_/g, ' ');
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div>
         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          Prospect Name *
+          Company Name *
         </label>
         <input
           type="text"
-          value={formData.prospect_name}
-          onChange={(e) => setFormData({ ...formData, prospect_name: e.target.value })}
+          value={formData.company_name}
+          onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
           className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
           required
         />
@@ -73,8 +64,8 @@ function ProspectForm({ formData, setFormData, onSubmit, onCancel, isEdit, prosp
         </label>
         <input
           type="email"
-          value={formData.prospect_email}
-          onChange={(e) => setFormData({ ...formData, prospect_email: e.target.value })}
+          value={formData.email}
+          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
           className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
         />
       </div>
@@ -85,32 +76,8 @@ function ProspectForm({ formData, setFormData, onSubmit, onCancel, isEdit, prosp
         </label>
         <input
           type="tel"
-          value={formData.prospect_phone}
-          onChange={(e) => setFormData({ ...formData, prospect_phone: e.target.value })}
-          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          Company
-        </label>
-        <input
-          type="text"
-          value={formData.prospect_company}
-          onChange={(e) => setFormData({ ...formData, prospect_company: e.target.value })}
-          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          Position
-        </label>
-        <input
-          type="text"
-          value={formData.prospect_position}
-          onChange={(e) => setFormData({ ...formData, prospect_position: e.target.value })}
+          value={formData.phone}
+          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
           className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
         />
       </div>
@@ -120,8 +87,8 @@ function ProspectForm({ formData, setFormData, onSubmit, onCancel, isEdit, prosp
           Status *
         </label>
         <select
-          value={formData.prospect_status}
-          onChange={(e) => setFormData({ ...formData, prospect_status: e.target.value })}
+          value={formData.status}
+          onChange={(e) => setFormData({ ...formData, status: e.target.value })}
           className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
           required
         >
@@ -131,39 +98,6 @@ function ProspectForm({ formData, setFormData, onSubmit, onCancel, isEdit, prosp
             </option>
           ))}
         </select>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          Source
-        </label>
-        <select
-          value={formData.prospect_source}
-          onChange={(e) => setFormData({ ...formData, prospect_source: e.target.value })}
-          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-        >
-          <option value="">Select source...</option>
-          {leadSources.map(source => (
-            <option key={source} value={source}>
-              {capitalize(source)}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          Estimated Value ({getCurrencySymbol()})
-        </label>
-        <input
-          type="number"
-          step="0.01"
-          value={formData.prospect_value}
-          onChange={(e) => setFormData({ ...formData, prospect_value: e.target.value })}
-          onFocus={(e) => e.target.value === '0' && (e.target.value = '')}
-          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-          placeholder="0.00"
-        />
       </div>
 
       <div>
@@ -189,8 +123,8 @@ function ProspectForm({ formData, setFormData, onSubmit, onCancel, isEdit, prosp
           Notes
         </label>
         <textarea
-          value={formData.prospect_notes}
-          onChange={(e) => setFormData({ ...formData, prospect_notes: e.target.value })}
+          value={formData.notes}
+          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
           rows={4}
           className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
         />
@@ -217,28 +151,22 @@ function ProspectForm({ formData, setFormData, onSubmit, onCancel, isEdit, prosp
 
 export default function Prospects() {
   const { user, hasWriteAccess } = useAuth();
-  const { getCurrencySymbol, isViewOnly } = useCurrency();
+  const { isViewOnly } = useCurrency();
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [prospectStatuses, setProspectStatuses] = useState<string[]>([]);
-  const [leadSources, setLeadSources] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [sourceFilter, setSourceFilter] = useState('all');
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [showEditPanel, setShowEditPanel] = useState(false);
   const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null);
   const [formData, setFormData] = useState<ProspectFormData>({
-    prospect_name: '',
-    prospect_email: '',
-    prospect_phone: '',
-    prospect_company: '',
-    prospect_position: '',
-    prospect_status: '',
-    prospect_source: '',
-    prospect_value: '',
-    prospect_notes: '',
+    company_name: '',
+    email: '',
+    phone: '',
+    status: '',
+    notes: '',
     assigned_to: '',
   });
 
@@ -293,13 +221,11 @@ export default function Prospects() {
   };
 
   const loadDropdowns = async () => {
-    const [statusRes, sourceRes] = await Promise.all([
-      api.dropdowns.getValues(''),
-      api.dropdowns.getValues(''),
+    const [statusRes] = await Promise.all([
+      api.dropdowns.getValues('lead_status'),
     ]);
 
-    if (statusRes.data) setProspectStatuses(statusRes.data.map(d => d.drop_value));
-    if (sourceRes.data) setLeadSources(sourceRes.data.map(d => d.drop_value));
+    if (statusRes.data) setProspectStatuses(statusRes.data.map(d => d.value));
   };
 
   const logActivity = async (action: string, details: string) => {
@@ -308,19 +234,14 @@ export default function Prospects() {
 
   const moveToCustomers = async (prospect: Prospect) => {
     const { data: customerData, error: insertError } = await api.customers.create({
-      customer_name: prospect.prospect_name,
-      customer_email: prospect.prospect_email,
-      customer_phone: prospect.prospect_phone,
-      customer_company: prospect.prospect_company,
-      customer_position: prospect.prospect_position,
-      customer_status: 'active',
-      customer_source: prospect.prospect_source,
-      customer_value: prospect.prospect_value,
-      customer_notes: prospect.prospect_notes,
+      contact_name: prospect.company_name,
+      email: prospect.email,
+      phone: prospect.phone,
+      customer_company: prospect.company_name,
+      notes: prospect.notes,
       assigned_to: prospect.assigned_to,
       created_by: user?.id,
       updated_by: user?.id,
-      original_prospect_id: prospect.id,
     });
 
     if (insertError) {
@@ -335,21 +256,17 @@ export default function Prospects() {
       return false;
     }
 
-    await logActivity('Convert Prospect to Customer', `Moved prospect "${prospect.prospect_name}" to customers`);
+    await logActivity('Convert Prospect to Customer', `Moved prospect "${prospect.company_name}" to customers`);
     return true;
   };
 
   const handleAdd = () => {
     setFormData({
-      prospect_name: '',
-      prospect_email: '',
-      prospect_phone: '',
-      prospect_company: '',
-      prospect_position: '',
-      prospect_status: prospectStatuses[0] || '',
-      prospect_source: '',
-      prospect_value: '',
-      prospect_notes: '',
+      company_name: '',
+      email: '',
+      phone: '',
+      status: prospectStatuses[0] || '',
+      notes: '',
       assigned_to: '',
     });
     setShowAddPanel(true);
@@ -358,22 +275,18 @@ export default function Prospects() {
   const handleEdit = (prospect: Prospect) => {
     setSelectedProspect(prospect);
     setFormData({
-      prospect_name: prospect.prospect_name,
-      prospect_email: prospect.prospect_email || '',
-      prospect_phone: prospect.prospect_phone || '',
-      prospect_company: prospect.prospect_company || '',
-      prospect_position: prospect.prospect_position || '',
-      prospect_status: prospect.prospect_status,
-      prospect_source: prospect.prospect_source || '',
-      prospect_value: prospect.prospect_value?.toString() || '',
-      prospect_notes: prospect.prospect_notes || '',
+      company_name: prospect.company_name,
+      email: prospect.email || '',
+      phone: prospect.phone || '',
+      status: prospect.status,
+      notes: prospect.notes || '',
       assigned_to: prospect.assigned_to || '',
     });
     setShowEditPanel(true);
   };
 
   const handleDelete = async (prospect: Prospect) => {
-    if (!confirm(`Are you sure you want to delete prospect "${prospect.prospect_name}"?`)) {
+    if (!confirm(`Are you sure you want to delete prospect "${prospect.company_name}"?`)) {
       return;
     }
 
@@ -382,7 +295,7 @@ export default function Prospects() {
     if (error) {
       alert('Error deleting prospect: ' + error.message);
     } else {
-      await logActivity('Delete Prospect', `Deleted prospect: ${prospect.prospect_name} (${prospect.prospect_company || 'No company'})`);
+      await logActivity('Delete Prospect', `Deleted prospect: ${prospect.company_name}`);
       loadProspects();
     }
   };
@@ -390,27 +303,23 @@ export default function Prospects() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.prospect_name.trim()) {
-      alert('Please enter a prospect name');
+    if (!formData.company_name.trim()) {
+      alert('Please enter a company name');
       return;
     }
 
     const prospectData = {
-      prospect_name: formData.prospect_name.trim(),
-      prospect_email: formData.prospect_email.trim() || null,
-      prospect_phone: formData.prospect_phone.trim() || null,
-      prospect_company: formData.prospect_company.trim() || null,
-      prospect_position: formData.prospect_position.trim() || null,
-      prospect_status: formData.prospect_status,
-      prospect_source: formData.prospect_source || null,
-      prospect_value: formData.prospect_value ? parseFloat(formData.prospect_value) : null,
-      prospect_notes: formData.prospect_notes.trim() || null,
+      company_name: formData.company_name.trim(),
+      email: formData.email.trim() || null,
+      phone: formData.phone.trim() || null,
+      status: formData.status,
+      notes: formData.notes.trim() || null,
       assigned_to: formData.assigned_to && formData.assigned_to.trim() !== '' ? formData.assigned_to : null,
     };
 
     if (showEditPanel && selectedProspect) {
-      if (formData.prospect_status === 'won') {
-        const moved = await moveToCustomers({ ...selectedProspect, prospect_status: formData.prospect_status });
+      if (formData.status === 'won') {
+        const moved = await moveToCustomers({ ...selectedProspect, status: formData.status });
         if (moved) {
           setShowEditPanel(false);
           loadProspects();
@@ -423,7 +332,7 @@ export default function Prospects() {
       if (error) {
         alert('Error updating prospect: ' + error.message);
       } else {
-        await logActivity('Update Prospect', `Updated prospect: ${formData.prospect_name} (Status: ${formData.prospect_status})`);
+        await logActivity('Update Prospect', `Updated prospect: ${formData.company_name} (Status: ${formData.status})`);
         setShowEditPanel(false);
         loadProspects();
       }
@@ -433,7 +342,7 @@ export default function Prospects() {
       if (error) {
         alert('Error creating prospect: ' + error.message);
       } else {
-        await logActivity('Create Prospect', `Created new prospect: ${formData.prospect_name} (${formData.prospect_company || 'No company'})`);
+        await logActivity('Create Prospect', `Created new prospect: ${formData.company_name}`);
         setShowAddPanel(false);
         loadProspects();
       }
@@ -442,15 +351,13 @@ export default function Prospects() {
 
   const filteredProspects = prospects.filter(prospect => {
     const matchesSearch =
-      prospect.prospect_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      prospect.prospect_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      prospect.prospect_company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      prospect.prospect_phone?.includes(searchTerm);
+      prospect.company_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      prospect.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      prospect.phone?.includes(searchTerm);
 
-    const matchesStatus = statusFilter === 'all' || prospect.prospect_status === statusFilter;
-    const matchesSource = sourceFilter === 'all' || prospect.prospect_source === sourceFilter;
+    const matchesStatus = statusFilter === 'all' || prospect.status === statusFilter;
 
-    return matchesSearch && matchesStatus && matchesSource;
+    return matchesSearch && matchesStatus;
   });
 
   const getStatusColor = (status: string) => {
@@ -488,7 +395,7 @@ export default function Prospects() {
       </div>
 
       <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
@@ -514,21 +421,6 @@ export default function Prospects() {
               ))}
             </select>
           </div>
-
-          <div>
-            <select
-              value={sourceFilter}
-              onChange={(e) => setSourceFilter(e.target.value)}
-              className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-slate-700 dark:text-white"
-            >
-              <option value="all">All Sources</option>
-              {leadSources.map(source => (
-                <option key={source} value={source}>
-                  {capitalize(source)}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
       </div>
 
@@ -543,22 +435,13 @@ export default function Prospects() {
               <thead className="bg-slate-50 dark:bg-slate-900">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Company
+                    Company Name
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Contact
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Source
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Value
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Assigned To
@@ -571,7 +454,7 @@ export default function Prospects() {
               <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                 {filteredProspects.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+                    <td colSpan={5} className="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
                       No prospects found
                     </td>
                   </tr>
@@ -579,28 +462,16 @@ export default function Prospects() {
                   filteredProspects.map((prospect) => (
                     <tr key={prospect.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-slate-900 dark:text-white">{prospect.prospect_name}</div>
-                        {prospect.prospect_position && (
-                          <div className="text-sm text-slate-500 dark:text-slate-400">{prospect.prospect_position}</div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white">
-                        {prospect.prospect_company || '-'}
+                        <div className="text-sm font-medium text-slate-900 dark:text-white">{prospect.company_name}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-slate-900 dark:text-white">{prospect.prospect_email || '-'}</div>
-                        <div className="text-sm text-slate-500 dark:text-slate-400">{prospect.prospect_phone || '-'}</div>
+                        <div className="text-sm text-slate-900 dark:text-white">{prospect.email || '-'}</div>
+                        <div className="text-sm text-slate-500 dark:text-slate-400">{prospect.phone || '-'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(prospect.prospect_status)}`}>
-                          {capitalize(prospect.prospect_status)}
+                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(prospect.status)}`}>
+                          {capitalize(prospect.status)}
                         </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white">
-                        {prospect.prospect_source ? capitalize(prospect.prospect_source) : '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white">
-                        {prospect.prospect_value ? `${getCurrencySymbol()}${prospect.prospect_value.toLocaleString('en-IN')}` : '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white">
                         {prospect.assigned_user?.name || 'Unassigned'}
@@ -646,7 +517,6 @@ export default function Prospects() {
           onCancel={handleCancel}
           isEdit={false}
           prospectStatuses={prospectStatuses}
-          leadSources={leadSources}
           users={users}
         />
       </SidePanel>
@@ -663,7 +533,6 @@ export default function Prospects() {
           onCancel={handleCancel}
           isEdit={true}
           prospectStatuses={prospectStatuses}
-          leadSources={leadSources}
           users={users}
         />
       </SidePanel>

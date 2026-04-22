@@ -9,20 +9,18 @@ import { api } from '../lib/api';
 
 interface Sale {
   id: string;
-  sale_number: string;
+  order_number: string;
   customer_id: string;
-  sale_date: string;
-  sale_notes: string | null;
-  is_delivered: boolean;
   created_at: string;
+  notes: string | null;
+  status: string;
   customers: {
-    customer_name: string;
+    contact_name: string;
     customer_company: string | null;
   };
   sale_items: Array<{
     id: string;
     assembly_unit_id: string;
-    serial_number: string;
     assembly_units: {
       assemblies: {
         assembly_name: string;
@@ -64,7 +62,7 @@ export default function Sales() {
       setSelectedSale({
         ...saleData,
         customer_id: sale.customer_id,
-        customer_name: sale.customers.customer_name,
+        customer_name: sale.customers.contact_name,
         sale_items: (saleData as any).sale_items || [],
       });
       setShowEditPanel(true);
@@ -72,7 +70,7 @@ export default function Sales() {
   };
 
   const handleDelete = async (sale: Sale) => {
-    if (!confirm(`Are you sure you want to delete sale ${sale.sale_number}?`)) {
+    if (!confirm(`Are you sure you want to delete sale ${sale.order_number}?`)) {
       return;
     }
 
@@ -82,24 +80,25 @@ export default function Sales() {
       alert('Error deleting sale: ' + error.message);
     } else {
       await api.activityLogs.create('DELETE_SALE', {
-        saleNumber: sale.sale_number,
-        customerName: sale.customers.customer_name,
+        saleNumber: sale.order_number,
+        customerName: sale.customers.contact_name,
       });
       loadSales();
     }
   };
 
   const handleDeliverToggle = async (sale: Sale) => {
-    const newDeliveredState = !sale.is_delivered;
+    const isDelivered = sale.status === 'delivered';
+    const newStatus = isDelivered ? 'pending' : 'delivered';
 
-    const { error: updateError } = await api.sales.update(sale.id, { is_delivered: newDeliveredState });
+    const { error: updateError } = await api.sales.update(sale.id, { status: newStatus });
 
     if (updateError) {
       alert('Error updating delivery status: ' + updateError.message);
       return;
     }
 
-    if (newDeliveredState) {
+    if (!isDelivered) {
       const { data: newDelivery, error: deliveryError } = await api.deliveries.create({
         sale_id: sale.id,
         created_by: userProfile?.id,
@@ -108,13 +107,13 @@ export default function Sales() {
 
       if (deliveryError || !newDelivery) {
         alert('Error creating delivery: ' + deliveryError?.message);
-        await api.sales.update(sale.id, { is_delivered: false });
+        await api.sales.update(sale.id, { status: 'pending' });
         return;
       }
 
       await api.activityLogs.create('CREATE_DELIVERY', {
-        saleNumber: sale.sale_number,
-        customerName: sale.customers.customer_name,
+        saleNumber: sale.order_number,
+        customerName: sale.customers.contact_name,
       });
     } else {
       const deliveryId = sale.deliveries?.[0]?.id;
@@ -123,14 +122,14 @@ export default function Sales() {
 
         if (deleteError) {
           alert('Error removing delivery: ' + deleteError.message);
-          await api.sales.update(sale.id, { is_delivered: true });
+          await api.sales.update(sale.id, { status: 'delivered' });
           return;
         }
       }
 
       await api.activityLogs.create('DELETE_DELIVERY', {
-        saleNumber: sale.sale_number,
-        customerName: sale.customers.customer_name,
+        saleNumber: sale.order_number,
+        customerName: sale.customers.contact_name,
       });
     }
 
@@ -142,8 +141,8 @@ export default function Sales() {
       setSelectedDelivery({
         ...sale.deliveries[0],
         sale_id: sale.id,
-        sale_number: sale.sale_number,
-        customer_name: sale.customers.customer_name,
+        order_number: sale.order_number,
+        customer_name: sale.customers.contact_name,
       });
       setShowDeliveryPanel(true);
     }
@@ -151,8 +150,8 @@ export default function Sales() {
 
   const filteredSales = sales.filter(sale => {
     const matchesSearch =
-      sale.sale_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      sale.customers.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      sale.order_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      sale.customers.contact_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       sale.customers.customer_company?.toLowerCase().includes(searchTerm.toLowerCase());
 
     return matchesSearch;
@@ -228,12 +227,12 @@ export default function Sales() {
                 filteredSales.map((sale) => (
                   <tr key={sale.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="font-medium text-slate-900 dark:text-white">{sale.sale_number}</span>
+                      <span className="font-medium text-slate-900 dark:text-white">{sale.order_number}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm">
                         <div className="font-medium text-slate-900 dark:text-white">
-                          {sale.customers.customer_name}
+                          {sale.customers.contact_name}
                         </div>
                         {sale.customers.customer_company && (
                           <div className="text-slate-500 dark:text-slate-400">
@@ -244,35 +243,31 @@ export default function Sales() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm text-slate-900 dark:text-white">
-                        {sale.sale_items.map((item, idx) => (
+                        {sale.sale_items.map((item) => (
                           <div key={item.id} className="mb-1">
                             <span className="font-medium">
                               {(item.assembly_units as any)?.assemblies?.assembly_name || 'Unknown'}
-                            </span>
-                            <br />
-                            <span className="text-xs text-slate-500 dark:text-slate-400">
-                              SN: {item.serial_number}
                             </span>
                           </div>
                         ))}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white">
-                      {formatDate(sale.sale_date)}
+                      {formatDate(sale.created_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {hasWriteAccess && !isViewOnly ? (
                         <label className="flex items-center cursor-pointer">
                           <input
                             type="checkbox"
-                            checked={sale.is_delivered}
+                            checked={sale.status === 'delivered'}
                             onChange={() => handleDeliverToggle(sale)}
                             className="w-5 h-5 text-blue-600 bg-slate-100 border-slate-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600"
                           />
                         </label>
                       ) : (
                         <span className="text-sm text-slate-700 dark:text-slate-300">
-                          {sale.is_delivered ? '✓' : '-'}
+                          {sale.status === 'delivered' ? '✓' : '-'}
                         </span>
                       )}
                     </td>
@@ -324,7 +319,7 @@ export default function Sales() {
       {showDeliveryPanel && selectedDelivery && (
         <DeliveryPanel
           delivery={selectedDelivery}
-          saleNumber={selectedDelivery.sale_number}
+          saleNumber={selectedDelivery.order_number}
           customerName={selectedDelivery.customer_name}
           onClose={() => {
             setShowDeliveryPanel(false);

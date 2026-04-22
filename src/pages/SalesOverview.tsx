@@ -6,38 +6,30 @@ import { api } from '../lib/api';
 
 interface Lead {
   id: string;
-  lead_name: string;
-  lead_company: string | null;
-  lead_status: string;
-  lead_value: number | null;
-  lead_email: string | null;
-  lead_phone: string | null;
-  lead_source: string | null;
+  company_name: string;
+  status: string;
+  email: string | null;
+  phone: string | null;
+  source: string | null;
   assigned_to: string | null;
 }
 
 interface Prospect {
   id: string;
-  prospect_name: string;
-  prospect_company: string | null;
-  prospect_status: string;
-  prospect_value: number | null;
-  prospect_email: string | null;
-  prospect_phone: string | null;
-  prospect_source: string | null;
+  company_name: string;
+  status: string;
+  email: string | null;
+  phone: string | null;
   assigned_to: string | null;
   original_lead_id?: string | null;
 }
 
 interface Customer {
   id: string;
-  customer_name: string;
+  contact_name: string;
   customer_company: string | null;
-  customer_status: string;
-  customer_value: number | null;
-  customer_email: string | null;
-  customer_phone: string | null;
-  customer_source: string | null;
+  email: string | null;
+  phone: string | null;
   original_prospect_id?: string | null;
 }
 
@@ -63,13 +55,6 @@ const prospectStatuses = [
   { value: 'lost', label: 'Lost', color: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300' },
 ];
 
-const customerStatuses = [
-  { value: 'active', label: 'Active', color: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' },
-  { value: 'inactive', label: 'Inactive', color: 'bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-300' },
-  { value: 'at_risk', label: 'At Risk', color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300' },
-  { value: 'churned', label: 'Churned', color: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300' },
-];
-
 export default function SalesOverview() {
   const { formatAmount, getCurrencySymbol } = useCurrency();
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -79,10 +64,6 @@ export default function SalesOverview() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'leads' | 'prospects' | 'customers'>('leads');
   const [draggedItem, setDraggedItem] = useState<{ type: 'lead' | 'prospect' | 'customer', id: string } | null>(null);
-
-  const formatCurrency = (amount: number) => {
-    return `${getCurrencySymbol()}${formatAmount(amount)}`;
-  };
 
   useEffect(() => {
     loadData();
@@ -112,13 +93,8 @@ export default function SalesOverview() {
     return user?.name || 'Unknown';
   };
 
-  const getLeadsByStatus = (status: string) => leads.filter(l => l.lead_status === status);
-  const getProspectsByStatus = (status: string) => prospects.filter(p => p.prospect_status === status);
-  const getCustomersByStatus = (status: string) => customers.filter(c => c.customer_status === status);
-
-  const calculateTotalValue = (items: { lead_value?: number | null; prospect_value?: number | null; customer_value?: number | null }[]) => {
-    return items.reduce((sum, item) => sum + (item.lead_value || item.prospect_value || item.customer_value || 0), 0);
-  };
+  const getLeadsByStatus = (status: string) => leads.filter(l => l.status === status);
+  const getProspectsByStatus = (status: string) => prospects.filter(p => p.status === status);
 
   const handleDragStart = (e: React.DragEvent, type: 'lead' | 'prospect' | 'customer', id: string) => {
     setDraggedItem({ type, id });
@@ -145,7 +121,7 @@ export default function SalesOverview() {
       if (targetStatus === 'qualified') {
         await convertLeadToProspect(lead, user.id);
       } else {
-        await api.leads.update(draggedItem.id, { lead_status: targetStatus });
+        await api.leads.update(draggedItem.id, { status: targetStatus });
       }
     } else if (draggedItem.type === 'prospect') {
       const prospect = prospects.find(p => p.id === draggedItem.id);
@@ -154,7 +130,7 @@ export default function SalesOverview() {
       if (targetStatus === 'won') {
         await convertProspectToCustomer(prospect, user.id);
       } else {
-        await api.prospects.update(draggedItem.id, { prospect_status: targetStatus });
+        await api.prospects.update(draggedItem.id, { status: targetStatus });
       }
     }
 
@@ -164,15 +140,10 @@ export default function SalesOverview() {
 
   const convertLeadToProspect = async (lead: Lead, userId: string) => {
     const { data: newProspect, error: insertError } = await api.prospects.create({
-      prospect_name: lead.lead_name,
-      prospect_email: lead.lead_email,
-      prospect_phone: lead.lead_phone,
-      prospect_company: lead.lead_company,
-      prospect_position: lead.lead_position,
-      prospect_status: 'qualified',
-      prospect_source: lead.lead_source,
-      prospect_value: lead.lead_value,
-      prospect_notes: lead.lead_notes,
+      company_name: lead.company_name,
+      email: lead.email,
+      phone: lead.phone,
+      status: 'qualified',
       assigned_to: lead.assigned_to,
     });
     if (!insertError && newProspect) {
@@ -182,15 +153,9 @@ export default function SalesOverview() {
 
   const convertProspectToCustomer = async (prospect: Prospect, userId: string) => {
     const { data: newCustomer, error: insertError } = await api.customers.create({
-      customer_name: prospect.prospect_name,
-      customer_email: prospect.prospect_email,
-      customer_phone: prospect.prospect_phone,
-      customer_company: prospect.prospect_company,
-      customer_position: prospect.prospect_position,
-      customer_status: 'active',
-      customer_source: prospect.prospect_source,
-      customer_value: prospect.prospect_value,
-      customer_notes: prospect.prospect_notes,
+      contact_name: prospect.company_name,
+      email: prospect.email,
+      phone: prospect.phone,
       assigned_to: prospect.assigned_to,
     });
     if (!insertError && newCustomer) {
@@ -220,9 +185,6 @@ export default function SalesOverview() {
             <div>
               <p className="text-sm text-slate-600 dark:text-slate-400">Total Leads</p>
               <p className="text-3xl font-bold text-slate-900 dark:text-white mt-2">{leads.length}</p>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                {formatCurrency(calculateTotalValue(leads))} potential value
-              </p>
             </div>
             <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
               <Target className="w-8 h-8 text-blue-600 dark:text-blue-400" />
@@ -235,9 +197,6 @@ export default function SalesOverview() {
             <div>
               <p className="text-sm text-slate-600 dark:text-slate-400">Total Prospects</p>
               <p className="text-3xl font-bold text-slate-900 dark:text-white mt-2">{prospects.length}</p>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                {formatCurrency(calculateTotalValue(prospects))} potential value
-              </p>
             </div>
             <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
               <UserPlus className="w-8 h-8 text-purple-600 dark:text-purple-400" />
@@ -250,9 +209,6 @@ export default function SalesOverview() {
             <div>
               <p className="text-sm text-slate-600 dark:text-slate-400">Total Customers</p>
               <p className="text-3xl font-bold text-slate-900 dark:text-white mt-2">{customers.length}</p>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                {formatCurrency(calculateTotalValue(customers))} lifetime value
-              </p>
             </div>
             <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
               <Users className="w-8 h-8 text-green-600 dark:text-green-400" />
@@ -327,18 +283,13 @@ export default function SalesOverview() {
                             className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow cursor-move border border-slate-200 dark:border-slate-700"
                           >
                             <h4 className="font-medium text-slate-900 dark:text-white mb-1">
-                              {lead.lead_name}
+                              {lead.company_name}
                             </h4>
-                            {lead.lead_company && (
-                              <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">
-                                {lead.lead_company}
-                              </p>
-                            )}
                             <div className="flex flex-wrap gap-2 mb-2">
-                              {lead.lead_source && (
+                              {lead.source && (
                                 <div className="flex items-center gap-1 text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-2 py-1 rounded">
                                   <Tag className="w-3 h-3" />
-                                  {lead.lead_source}
+                                  {lead.source}
                                 </div>
                               )}
                               {lead.assigned_to && (
@@ -348,12 +299,6 @@ export default function SalesOverview() {
                                 </div>
                               )}
                             </div>
-                            {lead.lead_value && (
-                              <div className="flex items-center text-sm text-green-600 dark:text-green-400">
-                                <DollarSign className="w-4 h-4 mr-1" />
-                                {formatCurrency(lead.lead_value)}
-                              </div>
-                            )}
                           </div>
                         ))}
                         {statusLeads.length === 0 && (
@@ -392,19 +337,8 @@ export default function SalesOverview() {
                             className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow cursor-move border border-slate-200 dark:border-slate-700"
                           >
                             <h4 className="font-medium text-slate-900 dark:text-white mb-1">
-                              {prospect.prospect_name}
+                              {prospect.company_name}
                             </h4>
-                            {prospect.prospect_company && (
-                              <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">
-                                {prospect.prospect_company}
-                              </p>
-                            )}
-                            {prospect.prospect_value && (
-                              <div className="flex items-center gap-1 text-sm bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-1 rounded mb-2 w-fit">
-                                <DollarSign className="w-4 h-4" />
-                                {formatCurrency(prospect.prospect_value)}
-                              </div>
-                            )}
                           </div>
                         ))}
                         {statusProspects.length === 0 && (
@@ -418,49 +352,40 @@ export default function SalesOverview() {
                 );
               })}
 
-              {activeTab === 'customers' && customerStatuses.map(status => {
-                const statusCustomers = getCustomersByStatus(status.value);
-                return (
-                  <div key={status.value} className="flex-shrink-0 w-72">
-                    <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="font-semibold text-slate-900 dark:text-white">{status.label}</h3>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${status.color}`}>
-                          {statusCustomers.length}
-                        </span>
-                      </div>
-                      <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                        {statusCustomers.map(customer => (
-                          <div
-                            key={customer.id}
-                            className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer border border-slate-200 dark:border-slate-700"
-                          >
-                            <h4 className="font-medium text-slate-900 dark:text-white mb-1">
-                              {customer.customer_name}
-                            </h4>
-                            {customer.customer_company && (
-                              <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">
-                                {customer.customer_company}
-                              </p>
-                            )}
-                            {customer.customer_value && (
-                              <div className="flex items-center text-sm text-green-600 dark:text-green-400">
-                                <DollarSign className="w-4 h-4 mr-1" />
-                                {formatCurrency(customer.customer_value)}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                        {statusCustomers.length === 0 && (
-                          <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">
-                            No customers
-                          </p>
-                        )}
-                      </div>
+              {activeTab === 'customers' && (
+                <div className="flex-shrink-0 w-full">
+                  <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-semibold text-slate-900 dark:text-white">Customers</h3>
+                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
+                        {customers.length}
+                      </span>
+                    </div>
+                    <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                      {customers.map(customer => (
+                        <div
+                          key={customer.id}
+                          className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer border border-slate-200 dark:border-slate-700"
+                        >
+                          <h4 className="font-medium text-slate-900 dark:text-white mb-1">
+                            {customer.contact_name}
+                          </h4>
+                          {customer.customer_company && (
+                            <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">
+                              {customer.customer_company}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                      {customers.length === 0 && (
+                        <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">
+                          No customers
+                        </p>
+                      )}
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              )}
             </div>
           </div>
         </div>

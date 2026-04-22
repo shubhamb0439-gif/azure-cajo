@@ -9,18 +9,15 @@ import { api } from '../lib/api';
 interface Delivery {
   id: string;
   sale_id: string;
-  delivery_address: string | null;
-  delivery_location: string | null;
   delivery_date: string;
-  delivery_notes: string | null;
-  delivered: boolean;
-  delivered_at: string | null;
+  notes: string | null;
+  status: string;
   created_at: string;
   delivery_items: Array<{
     sale_item_id: string;
     sale_items: {
       id: string;
-      serial_number: string;
+      assembly_unit_id: string;
       assembly_units: {
         assemblies: {
           assembly_name: string;
@@ -29,10 +26,10 @@ interface Delivery {
     };
   }>;
   sales: {
-    sale_number: string;
-    sale_date: string;
+    order_number: string;
+    created_at: string;
     customers: {
-      customer_name: string;
+      contact_name: string;
       customer_company: string | null;
     };
   };
@@ -64,14 +61,14 @@ export default function Deliveries() {
   const handleEdit = (delivery: Delivery) => {
     setSelectedDelivery({
       ...delivery,
-      sale_number: delivery.sales.sale_number,
-      customer_name: delivery.sales.customers.customer_name,
+      order_number: delivery.sales.order_number,
+      customer_name: delivery.sales.customers.contact_name,
     });
     setShowEditPanel(true);
   };
 
   const handleDelete = async (delivery: Delivery) => {
-    if (!confirm(`Are you sure you want to delete this delivery for ${delivery.sales.sale_number}?`)) {
+    if (!confirm(`Are you sure you want to delete this delivery for ${delivery.sales.order_number}?`)) {
       return;
     }
 
@@ -83,8 +80,8 @@ export default function Deliveries() {
     }
 
     await api.activityLogs.create('DELETE_DELIVERY', {
-      saleNumber: delivery.sales.sale_number,
-      customerName: delivery.sales.customers.customer_name,
+      saleNumber: delivery.sales.order_number,
+      customerName: delivery.sales.customers.contact_name,
     });
 
     loadDeliveries();
@@ -92,11 +89,9 @@ export default function Deliveries() {
 
   const filteredDeliveries = deliveries.filter(delivery => {
     const matchesSearch =
-      delivery.sales.sale_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      delivery.sales.customers.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      delivery.sales.customers.customer_company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      delivery.delivery_address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      delivery.delivery_location?.toLowerCase().includes(searchTerm.toLowerCase());
+      delivery.sales.order_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      delivery.sales.customers.contact_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      delivery.sales.customers.customer_company?.toLowerCase().includes(searchTerm.toLowerCase());
 
     return matchesSearch;
   });
@@ -125,7 +120,7 @@ export default function Deliveries() {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} />
               <input
                 type="text"
-                placeholder="Search by sale number, customer, address, or location..."
+                placeholder="Search by sale number, customer, or company..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
@@ -148,13 +143,10 @@ export default function Deliveries() {
                   Products
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Delivery Address
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Delivery Date
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Delivered
+                  Status
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Actions
@@ -164,7 +156,7 @@ export default function Deliveries() {
             <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
               {filteredDeliveries.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center">
+                  <td colSpan={6} className="px-6 py-12 text-center">
                     <p className="text-slate-500 dark:text-slate-400">
                       {searchTerm ? 'No deliveries found matching your search.' : 'No deliveries yet.'}
                     </p>
@@ -174,12 +166,12 @@ export default function Deliveries() {
                 filteredDeliveries.map((delivery) => (
                   <tr key={delivery.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="font-medium text-slate-900 dark:text-white">{delivery.sales.sale_number}</span>
+                      <span className="font-medium text-slate-900 dark:text-white">{delivery.sales.order_number}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm">
                         <div className="font-medium text-slate-900 dark:text-white">
-                          {delivery.sales.customers.customer_name}
+                          {delivery.sales.customers.contact_name}
                         </div>
                         {delivery.sales.customers.customer_company && (
                           <div className="text-slate-500 dark:text-slate-400">
@@ -196,10 +188,6 @@ export default function Deliveries() {
                               <span className="font-medium">
                                 {(deliveryItem.sale_items.assembly_units as any)?.assemblies?.assembly_name || 'Unknown'}
                               </span>
-                              <br />
-                              <span className="text-xs text-slate-500 dark:text-slate-400">
-                                SN: {deliveryItem.sale_items.serial_number}
-                              </span>
                             </div>
                           ))
                         ) : (
@@ -207,29 +195,17 @@ export default function Deliveries() {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-slate-900 dark:text-white">
-                        {delivery.delivery_address && (
-                          <div className="font-medium">{delivery.delivery_address}</div>
-                        )}
-                        {delivery.delivery_location && (
-                          <div className="text-slate-500 dark:text-slate-400">{delivery.delivery_location}</div>
-                        )}
-                        {!delivery.delivery_address && !delivery.delivery_location && (
-                          <span className="text-slate-400 dark:text-slate-500">Not specified</span>
-                        )}
-                      </div>
-                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white">
                       {formatDate(delivery.delivery_date)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <input
-                        type="checkbox"
-                        checked={delivery.delivered}
-                        disabled
-                        className="w-5 h-5 text-blue-600 bg-slate-100 border-slate-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600 cursor-not-allowed"
-                      />
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        delivery.status === 'delivered'
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                          : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
+                      }`}>
+                        {delivery.status === 'delivered' ? 'Completed' : 'Pending'}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       {hasWriteAccess && !isViewOnly && (
@@ -262,7 +238,7 @@ export default function Deliveries() {
       {showEditPanel && selectedDelivery && (
         <DeliveryPanel
           delivery={selectedDelivery}
-          saleNumber={selectedDelivery.sale_number}
+          saleNumber={selectedDelivery.order_number}
           customerName={selectedDelivery.customer_name}
           onClose={() => {
             setShowEditPanel(false);

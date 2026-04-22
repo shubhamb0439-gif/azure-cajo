@@ -8,53 +8,45 @@ import { api } from '../lib/api';
 interface PurchaseOrder {
   id: string;
   po_number: string;
-  delivery_date: string | null;
-  payment_terms: string;
+  expected_date: string | null;
   notes: string;
   status: string;
   created_at: string;
-  customer_id: string;
-  customers: {
-    customer_name: string;
-    customer_email: string | null;
-    customer_phone: string | null;
+  vendor_id: string;
+  vendors: {
+    name: string;
+    email: string | null;
+    phone: string | null;
   };
   purchase_order_items: {
     id: string;
+    purchase_order_id: string;
     quantity: number;
-    boms: {
-      bom_name: string;
-      inventory_items: {
-        item_name: string;
-      };
+    inventory_items: {
+      name: string;
     };
   }[];
 }
 
 interface Sale {
   id: string;
-  sale_number: string;
-  sale_date: string;
-  sale_notes: string | null;
-  is_delivered: boolean;
+  order_number: string;
+  created_at: string;
+  notes: string | null;
+  status: string;
   sale_items: {
     id: string;
-    serial_number: string;
   }[];
 }
 
 interface Delivery {
   id: string;
-  delivery_address: string | null;
-  delivery_location: string | null;
   delivery_date: string;
-  delivered: boolean;
-  delivered_at: string | null;
+  notes: string | null;
+  status: string;
   delivery_items: {
     id: string;
-    sale_item: {
-      serial_number: string;
-    };
+    sale_item_id: string;
   }[];
 }
 
@@ -63,10 +55,10 @@ export default function Orders() {
   const { isViewOnly } = useCurrency();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<PurchaseOrder[]>([]);
-  const [customers, setCustomers] = useState<{ id: string; customer_name: string }[]>([]);
+  const [vendors, setVendors] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [customerFilter, setCustomerFilter] = useState('all');
+  const [vendorFilter, setVendorFilter] = useState('all');
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   const [orderSales, setOrderSales] = useState<Record<string, Sale[]>>({});
   const [orderDeliveries, setOrderDeliveries] = useState<Record<string, Delivery[]>>({});
@@ -77,12 +69,12 @@ export default function Orders() {
 
   useEffect(() => {
     loadOrders();
-    loadCustomers();
+    loadVendors();
   }, []);
 
   useEffect(() => {
     filterOrders();
-  }, [orders, searchTerm, customerFilter]);
+  }, [orders, searchTerm, vendorFilter]);
 
   const loadOrders = async () => {
     setLoading(true);
@@ -115,11 +107,11 @@ export default function Orders() {
     setOrderHasRelations(relations);
   };
 
-  const loadCustomers = async () => {
-    const { data } = await api.customers.getAll();
+  const loadVendors = async () => {
+    const { data } = await api.vendors.getAll();
 
     if (data) {
-      setCustomers(data);
+      setVendors(data as any);
     }
   };
 
@@ -129,12 +121,12 @@ export default function Orders() {
     if (searchTerm) {
       filtered = filtered.filter(order =>
         order.po_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.customers.customer_name.toLowerCase().includes(searchTerm.toLowerCase())
+        order.vendors.name.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
-    if (customerFilter !== 'all') {
-      filtered = filtered.filter(order => order.customer_id === customerFilter);
+    if (vendorFilter !== 'all') {
+      filtered = filtered.filter(order => order.vendor_id === vendorFilter);
     }
 
     setFilteredOrders(filtered);
@@ -230,7 +222,7 @@ export default function Orders() {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
               type="text"
-              placeholder="Search by PO number or customer..."
+              placeholder="Search by PO number or vendor..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-slate-700 dark:text-white"
@@ -239,14 +231,14 @@ export default function Orders() {
 
           <div>
             <select
-              value={customerFilter}
-              onChange={(e) => setCustomerFilter(e.target.value)}
+              value={vendorFilter}
+              onChange={(e) => setVendorFilter(e.target.value)}
               className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-slate-700 dark:text-white"
             >
-              <option value="all">All Customers</option>
-              {customers.map(customer => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.customer_name}
+              <option value="all">All Vendors</option>
+              {vendors.map(vendor => (
+                <option key={vendor.id} value={vendor.id}>
+                  {vendor.name}
                 </option>
               ))}
             </select>
@@ -269,13 +261,13 @@ export default function Orders() {
                     PO Number
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Customer
+                    Vendor
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Items
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Delivery Date
+                    Expected Date
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Status
@@ -315,8 +307,8 @@ export default function Orders() {
                           <div className="text-sm font-medium text-slate-900 dark:text-white">{order.po_number}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-slate-900 dark:text-white">{order.customers.customer_name}</div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">{order.customers.customer_email}</div>
+                          <div className="text-sm text-slate-900 dark:text-white">{order.vendors.name}</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">{order.vendors.email}</div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-sm text-slate-900 dark:text-white">
@@ -324,7 +316,7 @@ export default function Orders() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-white">
-                          {order.delivery_date ? new Date(order.delivery_date).toLocaleDateString('en-IN') : '-'}
+                          {order.expected_date ? new Date(order.expected_date).toLocaleDateString('en-IN') : '-'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(order.status)}`}>
@@ -373,10 +365,6 @@ export default function Orders() {
                                   </div>
                                   <div className="bg-white dark:bg-slate-800 rounded-lg p-4 space-y-2 text-sm">
                                     <div>
-                                      <span className="font-medium text-slate-600 dark:text-slate-400">Payment Terms:</span>
-                                      <span className="ml-2 text-slate-900 dark:text-white">{order.payment_terms || '-'}</span>
-                                    </div>
-                                    <div>
                                       <span className="font-medium text-slate-600 dark:text-slate-400">Notes:</span>
                                       <span className="ml-2 text-slate-900 dark:text-white">{order.notes || '-'}</span>
                                     </div>
@@ -385,7 +373,7 @@ export default function Orders() {
                                       <ul className="ml-2 mt-1 space-y-1">
                                         {order.purchase_order_items.map((item) => (
                                           <li key={item.id} className="text-slate-900 dark:text-white">
-                                            {item.quantity}x {item.boms.bom_name} ({item.boms.inventory_items.item_name})
+                                            {item.quantity}x {item.inventory_items.name}
                                           </li>
                                         ))}
                                       </ul>
@@ -408,24 +396,20 @@ export default function Orders() {
                                             <th className="text-left py-2 px-3 text-slate-600 dark:text-slate-400">Sale Number</th>
                                             <th className="text-left py-2 px-3 text-slate-600 dark:text-slate-400">Date</th>
                                             <th className="text-left py-2 px-3 text-slate-600 dark:text-slate-400">Items</th>
-                                            <th className="text-left py-2 px-3 text-slate-600 dark:text-slate-400">Serial Numbers</th>
                                             <th className="text-center py-2 px-3 text-slate-600 dark:text-slate-400">Status</th>
                                           </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                                           {orderSales[order.po_number].map((sale) => (
                                             <tr key={sale.id}>
-                                              <td className="py-2 px-3 text-slate-700 dark:text-slate-300">{sale.sale_number}</td>
+                                              <td className="py-2 px-3 text-slate-700 dark:text-slate-300">{sale.order_number}</td>
                                               <td className="py-2 px-3 text-slate-700 dark:text-slate-300">
-                                                {new Date(sale.sale_date).toLocaleDateString('en-IN')}
+                                                {new Date(sale.created_at).toLocaleDateString('en-IN')}
                                               </td>
                                               <td className="py-2 px-3 text-slate-700 dark:text-slate-300">{sale.sale_items.length}</td>
-                                              <td className="py-2 px-3 text-slate-700 dark:text-slate-300">
-                                                {sale.sale_items.map(item => item.serial_number).join(', ')}
-                                              </td>
                                               <td className="py-2 px-3 text-center">
-                                                <span className={`px-2 py-1 text-xs rounded-full ${sale.is_delivered ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'}`}>
-                                                  {sale.is_delivered ? 'Delivered' : 'Pending'}
+                                                <span className={`px-2 py-1 text-xs rounded-full ${sale.status === 'delivered' ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'}`}>
+                                                  {sale.status === 'delivered' ? 'Delivered' : 'Pending'}
                                                 </span>
                                               </td>
                                             </tr>
@@ -449,8 +433,6 @@ export default function Orders() {
                                         <thead className="bg-slate-100 dark:bg-slate-700">
                                           <tr>
                                             <th className="text-left py-2 px-3 text-slate-600 dark:text-slate-400">Date</th>
-                                            <th className="text-left py-2 px-3 text-slate-600 dark:text-slate-400">Address</th>
-                                            <th className="text-left py-2 px-3 text-slate-600 dark:text-slate-400">Location</th>
                                             <th className="text-left py-2 px-3 text-slate-600 dark:text-slate-400">Items</th>
                                             <th className="text-center py-2 px-3 text-slate-600 dark:text-slate-400">Status</th>
                                           </tr>
@@ -462,22 +444,11 @@ export default function Orders() {
                                                 {new Date(delivery.delivery_date).toLocaleDateString('en-IN')}
                                               </td>
                                               <td className="py-2 px-3 text-slate-700 dark:text-slate-300">
-                                                {delivery.delivery_address || '-'}
-                                              </td>
-                                              <td className="py-2 px-3 text-slate-700 dark:text-slate-300">
-                                                {delivery.delivery_location || '-'}
-                                              </td>
-                                              <td className="py-2 px-3 text-slate-700 dark:text-slate-300">
-                                                {delivery.delivery_items.map((item, idx) => (
-                                                  <div key={item.id}>
-                                                    {idx > 0 && ', '}
-                                                    {item.sale_item.serial_number}
-                                                  </div>
-                                                ))}
+                                                {delivery.delivery_items.length} item(s)
                                               </td>
                                               <td className="py-2 px-3 text-center">
-                                                <span className={`px-2 py-1 text-xs rounded-full ${delivery.delivered ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'}`}>
-                                                  {delivery.delivered ? 'Completed' : 'Pending'}
+                                                <span className={`px-2 py-1 text-xs rounded-full ${delivery.status === 'delivered' ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'}`}>
+                                                  {delivery.status === 'delivered' ? 'Completed' : 'Pending'}
                                                 </span>
                                               </td>
                                             </tr>
